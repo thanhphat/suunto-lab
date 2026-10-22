@@ -197,6 +197,120 @@ SELECT athlete_id, date_trunc('week', day)::date AS week_start,
        round((array_agg(tsb ORDER BY day DESC))[1]::numeric, 1) AS tsb_end
 FROM daily_load GROUP BY athlete_id, date_trunc('week', day);
 
+-- ---------- Training notebook: exercise library, plans, journal ----------
+-- Library is shared by every plan. `data` holds the full item as the web app renders it
+-- (exercise: purpose, steps, cues, poses...; block: items [[exercise_id, dose]], min, note; test: unit, side, better).
+CREATE TABLE IF NOT EXISTS nb_categories (
+  id    text PRIMARY KEY,
+  name  text NOT NULL,
+  sort  smallint NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS nb_exercises (
+  id          text PRIMARY KEY,
+  sort        smallint NOT NULL DEFAULT 0,
+  cat         text NOT NULL REFERENCES nb_categories(id),
+  name        text NOT NULL,
+  data        jsonb NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS nb_blocks (
+  id          text PRIMARY KEY,
+  sort        smallint NOT NULL DEFAULT 0,
+  name        text NOT NULL,
+  data        jsonb NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS nb_tests (
+  id          text PRIMARY KEY,
+  sort        smallint NOT NULL DEFAULT 0,
+  name        text NOT NULL,
+  data        jsonb NOT NULL
+);
+
+-- A plan is one goal (usually a race): weeks with goals, and a list of items per day.
+CREATE TABLE IF NOT EXISTS plans (
+  id            text PRIMARY KEY,
+  athlete_id    bigint NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+  name          text NOT NULL,
+  race          text,
+  start_date    date NOT NULL,
+  end_date      date NOT NULL CHECK (end_date >= start_date),
+  test_note     text,
+  test_targets  jsonb NOT NULL DEFAULT '{}',   -- {test_id: [target week 1, week 2, ...]}
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS plan_weeks (
+  plan_id     text NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  n           smallint NOT NULL,
+  start_date  date NOT NULL,
+  end_date    date NOT NULL,
+  name        text NOT NULL,
+  focus       text,
+  PRIMARY KEY (plan_id, n)
+);
+CREATE TABLE IF NOT EXISTS plan_goals (
+  id       bigserial PRIMARY KEY,
+  plan_id  text NOT NULL,
+  week_n   smallint NOT NULL,
+  idx      smallint NOT NULL,
+  cat      text NOT NULL CHECK (cat IN ('test', 'volume', 'habit')),
+  text     text NOT NULL,
+  done_at  timestamptz,
+  UNIQUE (plan_id, week_n, idx),
+  FOREIGN KEY (plan_id, week_n) REFERENCES plan_weeks(plan_id, n) ON DELETE CASCADE
+);
+-- slot: S sáng, T trưa, C chiều/tối, N mỗi ngày. ref: '#BLOCK' (nb_blocks) or '@exercise' (nb_exercises) or ''.
+CREATE TABLE IF NOT EXISTS plan_items (
+  id       bigserial PRIMARY KEY,
+  plan_id  text NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  day      date NOT NULL,
+  idx      smallint NOT NULL,
+  slot     char(1) NOT NULL CHECK (slot IN ('S', 'T', 'C', 'N')),
+  label    text NOT NULL DEFAULT '',
+  ref      text NOT NULL DEFAULT '',
+  done_at  timestamptz,
+  UNIQUE (plan_id, day, idx)
+);
+
+-- Journal: belongs to the athlete and the day, not to a plan, so it carries across goals.
+CREATE TABLE IF NOT EXISTS daily_notes (
+  athlete_id  bigint NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+  day         date NOT NULL,
+  note        text NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (athlete_id, day)
+);
+-- Weekly self-tests. side: L / R for two-sided tests, V otherwise. Pace tests store minutes per km.
+CREATE TABLE IF NOT EXISTS test_results (
+  athlete_id  bigint NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+  test_id     text NOT NULL REFERENCES nb_tests(id),
+  day         date NOT NULL,
+  side        char(1) NOT NULL CHECK (side IN ('L', 'R', 'V')),
+  value       double precision NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (athlete_id, test_id, day, side)
+);
+-- Coach feedback written by Claude (or a human). kind 'week' is keyed by the plan week's start date.
+CREATE TABLE IF NOT EXISTS coach_notes (
+  athlete_id  bigint NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+  kind        text NOT NULL CHECK (kind IN ('day', 'week')),
+  day         date NOT NULL,
+  body        text NOT NULL,
+  author      text NOT NULL DEFAULT 'claude',
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (athlete_id, kind, day)
+);
+
+-- Plan items with the block / exercise name resolved: one row per thing to do on a day.
+CREATE OR REPLACE VIEW v_plan_days AS
+SELECT i.plan_id, p.athlete_id, i.day, i.idx, i.slot, i.ref,
+       coalesce(nullif(i.label, ''), b.name, e.name, i.ref) AS title,
+       i.done_at IS NOT NULL AS done
+FROM plan_items i JOIN plans p ON p.id = i.plan_id
+LEFT JOIN nb_blocks b ON i.ref = '#' || b.id
+LEFT JOIN nb_exercises e ON i.ref = '@' || e.id;
+
 -- Read-only role for AI agents (query_sql). Password set by the app at startup.
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agent_ro') THEN
@@ -206,6 +320,8 @@ END $$;
 GRANT USAGE ON SCHEMA public TO agent_ro;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM agent_ro;
 GRANT SELECT ON athletes, athlete_settings, activities, laps, samples, rr_intervals,
-                activity_metrics, splits, daily_load, v_activities, v_weekly TO agent_ro;
+                activity_metrics, splits, daily_load, v_activities, v_weekly,
+                nb_categories, nb_exercises, nb_blocks, nb_tests, plans, plan_weeks, plan_goals, plan_items,
+                daily_notes, test_results, coach_notes, v_plan_days TO agent_ro;
 ALTER ROLE agent_ro SET statement_timeout = '8s';
 ALTER ROLE agent_ro SET default_transaction_read_only = on;

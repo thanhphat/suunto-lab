@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Uploa
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from . import config, db, ingest, queries
+from . import config, db, ingest, notebook, queries
 
 log = logging.getLogger("api")
 STATIC = Path(__file__).parent / "static"
@@ -156,6 +156,99 @@ def reprocess_all(athlete: int = Depends(auth)):
                       "AND coalesce(error, '') <> 'Đã xoá hoạt động'", (athlete,)).rowcount
         c.execute("NOTIFY fit_files_pending")
     return {"queued": n}
+
+
+# ---------------- training notebook ----------------
+
+@app.get("/api/nb/library")
+def nb_library(athlete: int = Depends(auth)):
+    return notebook.library()
+
+
+@app.get("/api/nb/plans")
+def nb_plans(athlete: int = Depends(auth)):
+    return {"plans": notebook.list_plans(athlete), "active": notebook.active_plan_id(athlete)}
+
+
+@app.get("/api/nb/plans/{plan_id}")
+def nb_plan(plan_id: str, athlete: int = Depends(auth)):
+    p = notebook.get_plan(athlete, plan_id)
+    if p is None:
+        raise HTTPException(404, "Không tìm thấy giáo án.")
+    return p
+
+
+@app.get("/api/nb/journal")
+def nb_journal(start: date, end: date, athlete: int = Depends(auth)):
+    return notebook.journal(athlete, start, end)
+
+
+class DoneIn(BaseModel):
+    done: bool
+
+
+@app.put("/api/nb/items/{item_id}")
+def nb_item(item_id: int, body: DoneIn, athlete: int = Depends(auth)):
+    if not notebook.set_item_done(athlete, item_id, body.done):
+        raise HTTPException(404, "Không tìm thấy mục.")
+    return {"ok": True}
+
+
+@app.put("/api/nb/goals/{goal_id}")
+def nb_goal(goal_id: int, body: DoneIn, athlete: int = Depends(auth)):
+    if not notebook.set_goal_done(athlete, goal_id, body.done):
+        raise HTTPException(404, "Không tìm thấy mục tiêu.")
+    return {"ok": True}
+
+
+class NoteIn(BaseModel):
+    note: str = Field("", max_length=20000)
+
+
+@app.put("/api/nb/notes/{day}")
+def nb_note(day: date, body: NoteIn, athlete: int = Depends(auth)):
+    notebook.set_note(athlete, day, body.note)
+    return {"ok": True}
+
+
+class TestIn(BaseModel):
+    side: str = Field(pattern="^[LRV]$")
+    value: float | None = None
+
+
+@app.put("/api/nb/tests/{day}/{test_id}")
+def nb_test(day: date, test_id: str, body: TestIn, athlete: int = Depends(auth)):
+    notebook.set_test_result(athlete, test_id, day, body.side, body.value)
+    return {"ok": True}
+
+
+@app.post("/api/nb/import")
+async def nb_import(request: Request, athlete: int = Depends(auth)):
+    """Import a backup file exported by the notebook (format "so-tap-trail")."""
+    try:
+        data = await request.json()
+    except ValueError:
+        raise HTTPException(400, "File không phải JSON.")
+    if not isinstance(data, dict) or not isinstance(data.get("weeks"), dict):
+        raise HTTPException(400, "File không đúng định dạng sao lưu của sổ tập.")
+    return notebook.import_legacy(athlete, data)
+
+
+@app.exception_handler(notebook.NotebookError)
+async def nb_error(request: Request, exc: notebook.NotebookError):
+    return JSONResponse({"detail": str(exc)}, status_code=422)
+
+
+@app.get("/notebook")
+def notebook_page():
+    return FileResponse(STATIC / "notebook" / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/notebook/{name}")
+def notebook_asset(name: str):
+    if name not in ("app.js", "figures.js"):
+        raise HTTPException(404)
+    return FileResponse(STATIC / "notebook" / name, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/healthz")

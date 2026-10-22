@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Self-hosted store and analysis for Suunto (later Garmin/Coros) FIT files: a FastAPI backend + single-page web dashboard, a queue worker that parses FIT files and computes metrics, and a read-only MCP server so AI agents can analyse the data. Postgres 16 + TimescaleDB. README is in Vietnamese (`suunto-lab-architecture.md` is an identical copy); user-facing strings (API errors, activity names, worker error messages) are Vietnamese too — keep them that way.
+Self-hosted store and analysis for Suunto (later Garmin/Coros) FIT files: a FastAPI backend + single-page web dashboard, a queue worker that parses FIT files and computes metrics, a training notebook web app (plans per race, daily checklist, weekly goals, self-tests, exercise library), and an MCP server so AI agents can analyse the data and act as coach in the notebook.
+
+**The repo is public. Never commit personal data**: no real plans, journal entries, health/injury details, race names, exercise-library content, tokens or exports. Personal JSON lives in `private/` (gitignored, dockerignored) and is loaded into the DB via stdin with `python -m app.notebook ...`; seeds, fixtures and examples in code must be generic.
+
+Postgres 16 + TimescaleDB. README is in Vietnamese (`suunto-lab-architecture.md` is an identical copy); user-facing strings (API errors, activity names, worker error messages) are Vietnamese too — keep them that way.
 
 ## Commands
 
@@ -48,10 +52,16 @@ raw `fit_files` + files on disk → canonical `activities/laps/samples/rr_interv
 **Read side:** `queries.py` is the shared read model used by both `api.py` and `mcp_server.py`; put new read logic there rather than in either entrypoint. `queries.clean` makes DB values JSON-safe.
 
 **MCP server (`mcp_server.py`):**
-- Uses the `mcp` 2.x `MCPServer` API; all tools are read-only (`RO` annotations).
+- Uses the `mcp` 2.x `MCPServer` API. Activity tools are read-only (`RO`); notebook write tools use `RW` / `REPLACE` annotations and go through the main DB pool, never through `agent_ro`.
 - `INSTRUCTIONS` embeds the `app/metrics.py` module docstring — that docstring is the canonical definition of every metric (moving, grade, GAP/Minetti, VAM, zones, Edwards TRIMP, decoupling) and is sent to agents. Update it whenever metric logic changes.
 - `query_sql` connects as Postgres role `agent_ro` (granted in `schema.sql`: SELECT only, no `fit_files`, read-only transactions, 8 s timeout); only a single SELECT/WITH is accepted. New tables/views agents should see need an explicit `GRANT SELECT ... TO agent_ro` in `schema.sql`, and `describe_schema` should be updated.
 - `TokenGate` auth: `Authorization: Bearer <MCP_TOKEN>` or secret path `/mcp/<MCP_TOKEN>` (for claude.ai). `MCP_ALLOWED_HOSTS` enables DNS-rebinding protection.
+
+**Training notebook (`notebook.py`, `static/notebook/`):**
+- Library tables `nb_categories/nb_exercises/nb_blocks/nb_tests` store each item whole as jsonb `data` (the shape the web app renders); plans are `plans` → `plan_weeks` → `plan_goals`, plus `plan_items` (one row per thing to do on a day; `ref` is `#BLOCK` or `@exercise`; tick = `done_at`). Journal tables (`daily_notes`, `test_results`, `coach_notes`) are keyed by athlete + date, not plan, so they carry across plans. Week-level coach notes and test results use the plan week's start / end date.
+- Replacing a day's items (`_write_days`) carries ticks over to items with identical slot/label/ref; `save_plan` and `update_plan_days` validate refs against the library.
+- `static/notebook/app.js` is vanilla JS ported from an earlier standalone version: it loads library + plan + journal up front, renders synchronously, and writes each change with a `PUT /api/nb/...`. Export/import use the old `so-tap-trail` backup format (`import_legacy`).
+- `day_report` joins plan, journal and `v_activities` per day; it backs the MCP `get_day_report` tool used for "đánh giá ngày/tuần".
 
 **Web/API:** `api.py` serves `app/static/index.html` (single self-contained file, no build step) at `/`. All `/api/*` routes depend on `auth`, a single shared `API_TOKEN` (Bearer or `X-API-Token`); `/api/upload/raw` takes the raw body for the iOS Shortcut.
 

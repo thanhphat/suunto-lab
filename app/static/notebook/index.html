@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sổ tập</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Be+Vietnam+Pro:wght@400;500;600&display=swap">
+<style>
+/* Bố cục: một cột kiểu sổ tay thực địa, thanh tab dưới đáy trên điện thoại, thẻ chi tiết trượt lên. */
+:root {
+  --bg: #eef1ed; --surface: #fbfcfa; --ink: #18211c; --muted: #5b6760; --line: #d3dad4;
+  --accent: #2c6a4c; --accent-soft: #dcebe2; --marker: #b9561e; --marker-soft: #f6e3d6;
+  --fig: #18211c; --fig-far: #9aa59f; --prop: #e3ddcc; --prop-line: #a69c86;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111613; --surface: #1a211d; --ink: #e4ebe6; --muted: #9aa8a0; --line: #2d3732;
+  --accent: #7cc19c; --accent-soft: #20372b; --marker: #ec9566; --marker-soft: #3a261b;
+  --fig: #e4ebe6; --fig-far: #6c7a72; --prop: #2c332d; --prop-line: #7d7562; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111613; --surface: #1a211d; --ink: #e4ebe6; --muted: #9aa8a0; --line: #2d3732;
+  --accent: #7cc19c; --accent-soft: #20372b; --marker: #ec9566; --marker-soft: #3a261b;
+  --fig: #e4ebe6; --fig-far: #6c7a72; --prop: #2c332d; --prop-line: #7d7562; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); margin: 0 }
+body.locked { overflow: hidden }
+a { color: var(--accent) }
+.wrap { max-width: 760px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 96px }
+header.top { padding-block: 18px 6px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 6px 16px }
+.brand { font: 700 13px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted) }
+#planname { font: 700 30px/1.05 var(--display); margin: 4px 0 0; text-wrap: balance }
+.brand a { color: inherit; text-decoration: none }
+#planpick { font: 500 13px var(--body); margin-top: 6px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); max-width: 100% }
+#race { color: var(--muted); font-size: 13px }
+.count { font: 600 22px/1 var(--display); color: var(--marker); font-variant-numeric: tabular-nums }
+.sync { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted) }
+.sync.ok { color: var(--accent); border-color: var(--accent) }
+.sync.warn { color: var(--marker); border-color: var(--marker) }
+nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: center; gap: 4px; background: var(--surface); border-top: 1px solid var(--line);
+  padding: 8px max(16px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)) }
+.tab { flex: 1; max-width: 200px; font: 600 15px/1 var(--display); letter-spacing: .03em; text-transform: uppercase; padding: 12px 4px; white-space: nowrap; border-radius: var(--r); border: 0; background: transparent; color: var(--muted); cursor: pointer }
+.tab[aria-selected="true"] { background: var(--accent-soft); color: var(--accent) }
+@media (min-width: 900px) { nav.tabs { position: sticky; top: env(safe-area-inset-top, 0px); bottom: auto; border-top: 0; border-bottom: 1px solid var(--line) } .wrap { padding-block: 0 48px } }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.dayhead { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; margin: 14px 0 6px }
+.nav { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 24px; cursor: pointer }
+.nav:disabled { opacity: .35; cursor: default }
+.daytitle { text-align: center; min-width: 0 }
+.daytitle h2 { font: 700 28px/1.1 var(--display); margin: 2px 0 8px; text-wrap: balance }
+.eyebrow { font: 600 12px/1.3 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted) }
+.pill { font: 600 13px/1 var(--body); background: var(--marker-soft); color: var(--marker); padding: 3px 8px; border-radius: 99px; vertical-align: middle }
+.meter { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; max-width: 260px; margin: 0 auto }
+.meter span { display: block; height: 100%; background: var(--accent); transition: width .25s }
+.small { font-size: 13px; color: var(--muted) }
+.link-btn { display: block; margin: 0 auto 4px; background: none; border: 0; color: var(--accent); font: 500 14px var(--body); cursor: pointer; text-decoration: underline }
+.focus { text-align: center; color: var(--muted); margin: 4px auto 0; max-width: 60ch }
+.slot { margin-top: 22px }
+.slot h3 { font: 700 15px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line) }
+ul.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px }
+.item { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px }
+.item.done { border-color: var(--accent) }
+.item.done .iname { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--accent) }
+.chk { position: relative; flex: none; width: 28px; height: 28px; cursor: pointer }
+.chk input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer }
+.chk .box { position: absolute; inset: 0; border: 2px solid var(--line); border-radius: 8px; background: var(--bg) }
+.chk input:checked + .box { background: var(--accent); border-color: var(--accent) }
+.chk input:checked + .box::after { content: ""; position: absolute; left: 8px; top: 3px; width: 7px; height: 13px; border: solid var(--surface); border-width: 0 3px 3px 0; transform: rotate(45deg) }
+.chk input:focus-visible + .box { outline: 2px solid var(--accent); outline-offset: 2px }
+.itxt { min-width: 0; flex: 1 }
+.iname { font-weight: 600 }
+.guide { font-size: 13px; display: inline-block; margin-top: 4px }
+details.blk { margin-top: 6px }
+details.blk summary { cursor: pointer; color: var(--accent); font-size: 14px; font-weight: 500 }
+details.blk ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 6px }
+details.blk li a { font-weight: 500 }
+.dose { display: block; font-size: 13px; color: var(--muted) }
+.note { font-size: 13px; color: var(--muted); border-left: 3px solid var(--marker); padding-left: 8px; margin: 10px 0 0 }
+textarea { width: 100%; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; resize: vertical }
+.days { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px }
+.daycell { display: grid; gap: 4px; text-align: left; padding: 10px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; font: inherit }
+.daycell.is-today { border-color: var(--marker) }
+.daycell .dd { font-weight: 600; font-size: 14px }
+.daycell .pct { font: 600 20px/1 var(--display); font-variant-numeric: tabular-nums }
+.daycell .bar { height: 4px; background: var(--line); border-radius: 9px; overflow: hidden }
+.daycell .bar span { display: block; height: 100%; background: var(--accent) }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px }
+.tag { font: 600 11px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 3px 6px; border-radius: 4px; margin-right: 6px; background: var(--accent-soft); color: var(--accent) }
+.tag.test { background: var(--marker-soft); color: var(--marker) }
+.libhead { margin-top: 14px; display: grid; gap: 10px }
+input[type=search] { width: 100%; font: inherit; padding: 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink) }
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chip { font: 500 13px var(--body); padding: 6px 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink) }
+.blkgrid, .exlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px }
+.blkcard, .excard { display: grid; gap: 2px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); text-decoration: none; color: var(--ink) }
+.blkcard span, .excard .mus { font-size: 13px; color: var(--muted) }
+.excard .cat { font: 600 11px/1.2 var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--marker) }
+.tips ul { color: var(--muted) }
+.loading { color: var(--muted); text-align: center; margin-top: 40px }
+/* thẻ chi tiết */
+[hidden] { display: none !important }
+#sheet { position: fixed; inset: 0; z-index: 20; background: rgba(10, 14, 12, .5); display: flex; align-items: flex-end; justify-content: center }
+.sheetin { background: var(--surface); width: 100%; max-width: 760px; max-height: 92%; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; overflow: hidden }
+@media (min-width: 900px) { #sheet { align-items: center } .sheetin { border-radius: 16px; max-height: 88% } }
+.sheetbar { display: flex; justify-content: flex-end; padding: 10px 12px 0 }
+#closebtn { font: 600 14px var(--body); border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 99px; padding: 8px 14px; cursor: pointer }
+#sheetbody { overflow-y: auto; padding: 4px max(20px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px)) }
+#sheetbody h2 { font: 700 30px/1.05 var(--display); margin: 2px 0 2px; text-wrap: balance }
+#sheetbody h3 { font: 700 15px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 6px }
+#sheetbody ul, #sheetbody ol { padding-left: 20px; margin: 0; display: grid; gap: 4px; max-width: 65ch }
+.en { color: var(--muted); margin: 0 0 8px; font-style: italic }
+.lead { font-size: 16px; max-width: 65ch }
+.figwrap { margin: 8px 0; background: var(--bg); border-radius: var(--r); padding: 8px }
+.figwrap figcaption { font-size: 12px; color: var(--muted); padding: 4px 4px 0 }
+svg.fig { width: 100%; max-width: 520px; height: auto; display: block; margin: 0 auto }
+.fig line { stroke: var(--fig); stroke-width: 5; stroke-linecap: round }
+.fig line.far { stroke: var(--fig-far) }
+.fig line.foot { stroke-width: 4 }
+.fig .head { fill: var(--surface); stroke: var(--fig); stroke-width: 4 }
+.fig .ground { stroke: var(--line); stroke-width: 2 }
+.fig .divider { stroke: var(--line); stroke-width: 1 }
+.fig .prop { fill: var(--prop); stroke: var(--prop-line); stroke-width: 1.5 }
+.fig .prop.solid { fill: var(--prop-line) }
+.fig line.wall, .fig line.pole { stroke: var(--prop-line); stroke-width: 3 }
+.fig .band { fill: none; stroke: var(--marker); stroke-width: 2 }
+.fig line.arrow { stroke: var(--marker); stroke-width: 2.5 }
+.fig .ahead { fill: var(--marker) }
+.fig .lbl { font: 500 11px var(--body); fill: var(--muted) }
+.fig .eye { fill: var(--fig) }
+.fig .footsh { fill: var(--prop); stroke: var(--fig); stroke-width: 2.5 }
+.fig .toe { fill: var(--surface); stroke: var(--fig); stroke-width: 2.5 }
+.fig .toe.up { fill: var(--accent); stroke: var(--accent) }
+.fig .toe.hl { fill: var(--fig-far) }
+.fig line.shin { stroke: var(--fig); stroke-width: 6 }
+.fig .arc { fill: none; stroke: var(--marker); stroke-width: 2.5 }
+.fig .wheel { fill: none; stroke: var(--prop-line); stroke-width: 3 }
+.fig .sun { fill: var(--marker) } .fig line.sunray { stroke: var(--marker); stroke-width: 2.5 }
+.fig line.bandl { stroke: var(--marker); stroke-width: 2.5; stroke-dasharray: 4 3 }
+.fig .step { font: 600 12px var(--body); fill: var(--muted) }
+dl.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin: 12px 0 }
+dl.facts div { background: var(--bg); border-radius: var(--r); padding: 10px }
+dl.facts dt { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+dl.facts dd { margin: 2px 0 0; font-weight: 500 }
+.twocol { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 16px }
+.twocol p { margin: 0 }
+.stop { margin-top: 16px; padding: 10px 12px; border-radius: var(--r); background: var(--marker-soft); color: var(--ink) }
+ol.blklist { display: grid; gap: 10px !important }
+ol.blklist li a b { font-weight: 600 }
+table.cap { width: 100%; border-collapse: collapse; font-size: 14px }
+.capwrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r) }
+table.cap th, table.cap td { padding: 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle }
+table.cap th { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap }
+table.cap td.num, table.cap th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap }
+table.cap tr.grp td { background: var(--bg); font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.capin { display: flex; gap: 6px; flex-wrap: wrap }
+.capin label { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted) }
+.capin input { width: 64px; font: inherit; font-size: 15px; padding: 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); text-align: right }
+.st { font: 600 12px var(--body); padding: 2px 7px; border-radius: 99px; white-space: nowrap }
+.st.ok { background: var(--accent-soft); color: var(--accent) }
+.st.no { background: var(--marker-soft); color: var(--marker) }
+.delta { font-size: 12px; color: var(--muted) }
+.delta.good { color: var(--accent) } .delta.bad { color: var(--marker) }
+.tname a { font-weight: 500 }
+h4.capgrp { font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--marker); margin: 14px 0 6px }
+.capcards { display: grid; gap: 8px }
+.capcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; gap: 8px }
+.capcard.pass { border-color: var(--accent) }
+.capmeta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted) }
+.capmeta b { color: var(--ink); font-weight: 600 }
+.caprow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px }
+.capin label { font-size: 13px }
+.hist td { white-space: nowrap }
+.coach { margin-top: 16px; background: var(--accent-soft); border-radius: var(--r); padding: 12px 14px }
+.coach h3 { font: 700 14px/1 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin: 0 0 8px }
+.coach p { margin: 0 0 8px; max-width: 65ch } .coach p:last-child { margin-bottom: 0 }
+.coach p.cb { padding-left: 14px; position: relative } .coach p.cb::before { content: ""; position: absolute; left: 2px; top: .65em; width: 5px; height: 5px; border-radius: 50%; background: var(--accent) }
+footer.foot { margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+footer.foot button { font: 500 13px var(--body); padding: 8px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer }
+@media (prefers-reduced-motion: reduce) { .meter span { transition: none } }
+.acts { display: grid; gap: 8px }
+.act { display: grid; gap: 2px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--marker); border-radius: var(--r); color: var(--ink); text-decoration: none }
+.act .am { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums }
+.login { max-width: 420px; margin: 40px auto; display: grid; gap: 10px }
+.login input { font: inherit; padding: 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink) }
+.login button { font: 600 15px var(--body); padding: 12px; border-radius: var(--r); border: 0; background: var(--accent); color: var(--surface); cursor: pointer }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="brand"><a href="/">Suunto Lab</a> · Sổ tập</div>
+      <h1 id="planname"></h1>
+      <div id="race"></div>
+      <select id="planpick" aria-label="Chọn giáo án" hidden></select>
+    </div>
+    <div style="text-align:right">
+      <div class="count" id="count"></div>
+      <span id="sync" class="sync">Đang kết nối…</span>
+    </div>
+  </header>
+  <nav class="tabs" aria-label="Chế độ xem">
+    <button class="tab" data-view="today" aria-selected="true">Hôm nay</button>
+    <button class="tab" data-view="week" aria-selected="false">Tuần</button>
+    <button class="tab" data-view="cap" aria-selected="false">Năng lực</button>
+    <button class="tab" data-view="lib" aria-selected="false">Thư viện</button>
+  </nav>
+  <main id="main"><p class="loading">Đang tải giáo án…</p></main>
+  <footer class="foot">
+    <span class="small">Sao lưu dữ liệu tập:</span>
+    <button data-act="export">Xuất file</button>
+    <button data-act="import">Nhập file</button>
+    <input id="importfile" type="file" accept="application/json,.json" hidden>
+    <span id="impmsg" class="small"></span>
+  </footer>
+</div>
+
+<div id="sheet" hidden role="dialog" aria-modal="true" aria-label="Hướng dẫn">
+  <div class="sheetin">
+    <div class="sheetbar"><button id="closebtn">Đóng</button></div>
+    <div id="sheetbody"></div>
+  </div>
+</div>
+
+<script src="/notebook/figures.js"></script>
+<script src="/notebook/app.js"></script>
+</body>
+</html>

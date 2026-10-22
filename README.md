@@ -4,7 +4,8 @@ Hệ thống tự host để lưu và phân tích dữ liệu đồng hồ Suunt
 
 - **Backend xử lý file FIT**: nhận file, lưu bản gốc, parse và tính chỉ số, ghi vào Postgres/TimescaleDB.
 - **Web dashboard**: xem dữ liệu, thay cho việc Suunto không có bản web.
-- **MCP server**: cho Claude hoặc AI agent khác đọc và phân tích dữ liệu, chỉ có quyền đọc.
+- **Sổ tập** (`/notebook`): giáo án theo từng giải, check bài mỗi ngày, mục tiêu tuần, tự kiểm tra năng lực, thư viện bài tập có hình minh hoạ.
+- **MCP server**: cho Claude hoặc AI agent khác phân tích dữ liệu. Dữ liệu đồng hồ chỉ đọc; sổ tập thì agent được ghi (nhận xét, giáo án, thư viện).
 
 ```
 iPhone: Suunto app → Export FIT → Share → Shortcut ─┐
@@ -15,7 +16,7 @@ Web: kéo thả file FIT ──────────────────�
                                                              │
                      Postgres + TimescaleDB ◀────────────────┘
                         ▲            ▲
-                api + web (8000)    mcp (8001, read-only) ◀── Claude Desktop / claude.ai / Claude Code
+                api + web (8000)    mcp (8001)            ◀── Claude Desktop / claude.ai / Claude Code
 ```
 
 ## Chạy
@@ -74,7 +75,17 @@ Các tool có sẵn:
 | `get_weekly_summary` | Tổng hợp theo tuần |
 | `compare_periods` | So sánh hai giai đoạn |
 | `describe_schema` | Mô tả các bảng trong DB |
-| `query_sql` | Chạy SQL tuỳ ý |
+| `query_sql` | Chạy SQL tuỳ ý (chỉ đọc) |
+| `list_plans`, `get_plan` | Giáo án, mục tiêu tuần, việc từng ngày và đã tick chưa |
+| `get_day_report` | Mỗi ngày: việc đã tick, ghi chú, kết quả test, buổi tập từ đồng hồ. Dùng để "đánh giá ngày/tuần" |
+| `get_journal` | Ghi chú, kết quả tự kiểm tra, nhận xét coach theo khoảng ngày |
+| `search_library`, `get_library_item` | Tìm bài tập, mẫu buổi, bài test |
+| `write_coach_note` ✎ | Ghi nhận xét ngày hoặc tuần vào sổ tập |
+| `record_test_result` ✎ | Ghi kết quả tự kiểm tra |
+| `save_plan`, `update_plan_days` ✎ | Tạo giáo án cho giải mới, chỉnh lịch các ngày tới |
+| `save_library_item` ✎ | Thêm hoặc sửa bài tập, mẫu buổi, bài test |
+
+✎ là tool có quyền ghi, chỉ ghi vào các bảng của sổ tập, không đụng tới dữ liệu đồng hồ.
 
 `query_sql` chạy bằng role `agent_ro`: chỉ đọc, timeout 8 giây, tối đa 1000 dòng, không thấy bảng `fit_files`.
 
@@ -107,6 +118,25 @@ Câu hỏi mẫu cho agent:
 - "Với CTL/ATL hiện tại, tuần tới nên tăng hay giảm tải?"
 
 Kiểm tra nhanh từ terminal: `MCP_TOKEN=... scripts/mcp_call.sh get_overview`.
+
+## Sổ tập
+
+Mở `/notebook` (hoặc nút *Sổ tập* trên dashboard), đăng nhập bằng cùng `API_TOKEN`.
+
+- **Hôm nay**: việc theo buổi sáng/trưa/chiều/mỗi ngày, bấm vào tên để mở hướng dẫn bài, ghi chú ngày, các buổi đồng hồ ghi nhận trong ngày.
+- **Tuần**: checklist mục tiêu tuần, phần trăm hoàn thành từng ngày.
+- **Năng lực**: bộ tự kiểm tra hằng tuần, so với mục tiêu và tuần trước.
+- **Thư viện**: bài tập và mẫu buổi tập dùng chung cho mọi giáo án.
+
+Mỗi giải hoặc mục tiêu là một giáo án riêng; ghi chú và kết quả test gắn với ngày nên đi xuyên qua các giáo án. Muốn có giáo án mới, nhờ agent qua MCP (`save_plan`), hoặc nạp file JSON (định dạng ở docstring đầu `app/notebook.py`).
+
+**Nội dung cá nhân không nằm trong repo.** Thư viện bài tập, giáo án và nhật ký là dữ liệu riêng, chỉ nằm trong DB. Nếu giữ bản JSON thì để trong `private/` (đã ignore) và nạp qua stdin:
+
+```bash
+docker compose exec -T api python -m app.notebook load-library < private/notebook/library.json
+docker compose exec -T api python -m app.notebook load-plan    < private/notebook/plan.json
+docker compose exec -T api python -m app.notebook import-legacy < so-tap-export.json  # file "Xuất file" của sổ tập
+```
 
 ## Thiết kế dữ liệu
 

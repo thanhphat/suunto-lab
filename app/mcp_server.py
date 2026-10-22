@@ -1,6 +1,7 @@
 """MCP server: lets an AI agent (Claude Desktop, claude.ai, Claude Code...) read and analyse training data.
 
-Everything here is read-only. Run:
+Activity data is read-only. The training notebook (plans, coach notes, test results, exercise library)
+can also be written by the agent. Run:
   python -m app.mcp_server --stdio          # local, e.g. Claude Desktop
   python -m app.mcp_server --http 8001      # remote (streamable HTTP at /mcp)
 """
@@ -17,19 +18,30 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
-from . import config, db, metrics, queries
+from . import config, db, metrics, notebook, queries
 
 log = logging.getLogger("mcp")
 RO = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+RW = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
+REPLACE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False)
 
 INSTRUCTIONS = f"""
-You have read-only access to one athlete's training log, built from FIT files recorded on Suunto watches
-(trail and ultra running mostly). Units: distance metres (or *_km), time seconds, pace seconds per km,
+You have access to one athlete's training data. Two sources:
+1. Activities recorded by the watch (FIT files): read-only.
+2. The training notebook: plans (one per goal or race) with items per day and goals per week, the athlete's
+   daily notes (pain scores, HRV, sleep, how it felt), weekly self-test results, and coach notes.
+   You can write coach notes, record test results, create or adjust plans, and extend the exercise library. Units: distance metres (or *_km), time seconds, pace seconds per km,
 altitude metres, HR bpm, speed m/s, grade as a fraction. Dates are in the athlete's local timezone.
 
 Start with get_overview, then narrow down with list_activities / get_activity / get_activity_streams.
 Use get_training_load for fitness (CTL), fatigue (ATL) and form (TSB) over time, and compare_periods
 to compare blocks. Use query_sql only when no other tool answers the question; call describe_schema first.
+
+To review a day or a week ("đánh giá ngày/tuần"): call get_day_report for the range (plan items and ticks,
+the athlete's note, tests, and the watch's activities side by side), then save your feedback with
+write_coach_note. Write coach notes in the athlete's language (Vietnamese), plain paragraphs, lines starting
+with "-" render as bullets. To build a plan for a new race: search_library for blocks/exercises to reference,
+add missing ones with save_library_item, then save_plan. Adjust single days with update_plan_days.
 
 Metric definitions:
 {metrics.__doc__}
@@ -114,8 +126,125 @@ def compare_periods(a_start: str, a_end: str, b_start: str, b_end: str) -> dict:
             "b": queries.period_summary(athlete(), _d(b_start), _d(b_end))}
 
 
+# ---------------- training notebook ----------------
+
+def _plan_id(plan_id: str | None) -> str:
+    pid = plan_id or notebook.active_plan_id(athlete())
+    if not pid:
+        raise ToolError("No plan yet. Create one with save_plan.")
+    return pid
+
+
+def _nb(fn, *args):
+    try:
+        return fn(*args)
+    except notebook.NotebookError as e:
+        raise ToolError(str(e))
+
+
+@mcp.tool(annotations=RO)
+def list_plans() -> dict:
+    """All training plans (one per goal or race) and which one is active today."""
+    return {"plans": notebook.list_plans(athlete()), "active": notebook.active_plan_id(athlete())}
+
+
+@mcp.tool(annotations=RO)
+def get_plan(plan_id: str | None = None, start_date: str | None = None, end_date: str | None = None) -> dict:
+    """A plan with its weeks (name, focus, goals with done flags), test targets per week, and the items
+    for each day in the range (slot S/T/C/N = morning/noon/evening/daily, label, ref '#BLOCK' or
+    '@exercise', done). Defaults: active plan, whole date range."""
+    p = notebook.get_plan(athlete(), _plan_id(plan_id), _d(start_date), _d(end_date))
+    if p is None:
+        raise ToolError(f"Plan {plan_id!r} not found")
+    return p
+
+
+@mcp.tool(annotations=RO)
+def get_day_report(start_date: str, end_date: str | None = None) -> list[dict]:
+    """Everything about each day in the range (max 31 days): planned items and which were ticked,
+    the athlete's own note, coach note, self-test results, and activities recorded by the watch.
+    Use this first when asked to review a day or a week."""
+    start = _d(start_date)
+    end = _d(end_date) or start
+    if (end - start).days > 31 or end < start:
+        raise ToolError("Range must be 0-31 days")
+    return notebook.day_report(athlete(), start, end)
+
+
+@mcp.tool(annotations=RO)
+def get_journal(start_date: str, end_date: str) -> dict:
+    """Athlete notes, self-test results and coach notes in a date range (any length)."""
+    return notebook.journal(athlete(), _d(start_date), _d(end_date))
+
+
+@mcp.tool(annotations=RW)
+def write_coach_note(date: str, text: str, kind: str = "day") -> dict:
+    """Save coach feedback shown in the notebook. kind 'day' attaches it to that date; kind 'week'
+    attaches it to the plan week whose start date is `date`. Replaces any previous note there;
+    empty text deletes it."""
+    _nb(notebook.set_coach_note, athlete(), kind, _d(date), text)
+    return {"saved": True, "kind": kind, "date": date}
+
+
+@mcp.tool(annotations=RW)
+def record_test_result(test_id: str, date: str, value: float | None, side: str = "V") -> dict:
+    """Record one self-test result (see search_library kind='test' for ids and units). side L or R for
+    two-sided tests, V otherwise. Pace tests take minutes per km as a decimal (8:30 -> 8.5).
+    The notebook shows a plan week's results stored on that week's end date. value null deletes."""
+    _nb(notebook.set_test_result, athlete(), test_id, _d(date), side, value)
+    return {"saved": True}
+
+
+@mcp.tool(annotations=RO)
+def search_library(query: str | None = None, kind: str | None = None) -> list[dict]:
+    """Find exercises, session blocks and self-tests to reference in plans. kind: exercise, block, test
+    or omitted for all. Returns ids and the ref to use in plan items ('@id' or '#ID')."""
+    return notebook.search_library(query, kind)
+
+
+@mcp.tool(annotations=RO)
+def get_library_item(kind: str, item_id: str) -> dict:
+    """Full content of one exercise (instructions, cues, figure poses), block (exercises with doses) or test."""
+    item = _nb(notebook.get_library_item, kind, item_id)
+    if item is None:
+        raise ToolError(f"{kind} {item_id!r} not found")
+    return item
+
+
+@mcp.tool(annotations=RW)
+def save_library_item(kind: str, item: dict) -> dict:
+    """Add or replace an exercise, block or test. Copy the shape of an existing item from get_library_item.
+    exercise: id, name, en, cat, purpose, muscles, dose, tempo, setup[], steps[], cues[], mistakes[],
+    easier, harder, stop, optional poses (stick figure, copy and adapt from a similar exercise).
+    block: id, name, min, note, items [[exercise_id, dose text]]. test: id, name, group, unit, side (bool),
+    better ('up' | 'down' | 'none'), ex (exercise id with instructions), optional fmt 'pace'."""
+    return _nb(notebook.save_library_item, kind, item)
+
+
+@mcp.tool(annotations=REPLACE)
+def save_plan(plan: dict) -> dict:
+    """Create or fully replace a plan. Shape:
+    {"id": "race-2027", "name", "race", "start": "YYYY-MM-DD", "end", "test_note",
+     "test_targets": {test_id: [target for week 1, week 2, ...]},
+     "weeks": [{"n": 1, "start", "end", "name", "focus", "goals": [["test"|"volume"|"habit", text], ...]}],
+     "days": {"YYYY-MM-DD": [[slot, label, ref], ...]}}
+    slot: S morning, T noon, C evening, N every day. ref '#BLOCK' or '@exercise' or ''; label may be ''
+    when ref is set. List every day explicitly, daily items included. Ticks on unchanged items are kept.
+    Read the current plan with get_plan before replacing it."""
+    return _nb(notebook.save_plan, athlete(), plan)
+
+
+@mcp.tool(annotations=REPLACE)
+def update_plan_days(days: dict, plan_id: str | None = None) -> dict:
+    """Replace the items of the given days only: {"YYYY-MM-DD": [[slot, label, ref], ...]}.
+    Use it to adjust upcoming days after a review. Ticks on unchanged items are kept."""
+    return _nb(notebook.update_plan_days, athlete(), _plan_id(plan_id), days)
+
+
 ALLOWED_TABLES = ["athletes", "athlete_settings", "activities", "laps", "samples", "rr_intervals",
-                  "activity_metrics", "splits", "daily_load", "v_activities", "v_weekly"]
+                  "activity_metrics", "splits", "daily_load", "v_activities", "v_weekly",
+                  "plans", "plan_weeks", "plan_goals", "plan_items", "v_plan_days", "daily_notes",
+                  "test_results", "coach_notes", "nb_tests", "nb_blocks", "nb_exercises", "nb_categories"]
 
 
 @mcp.tool(annotations=RO)
@@ -137,6 +266,9 @@ def describe_schema() -> dict:
             "daily_load has one row per day including rest days; v_weekly aggregates it by ISO week.",
             "zone_s is an int array, Z1..Z5 seconds (1-based in SQL: zone_s[1] is Z1).",
             "local_date is the start date in the athlete's timezone; start_time is UTC timestamptz.",
+            "Notebook: v_plan_days lists each planned item with its title and done flag; join daily_notes,"
+            " test_results and coach_notes on day (athlete-local date) and v_activities on local_date.",
+            "nb_* tables hold the exercise library as jsonb `data`; test_results.side is L/R/V.",
         ],
     }
 
