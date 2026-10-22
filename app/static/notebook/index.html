@@ -183,6 +183,24 @@ footer.foot button { font: 500 13px var(--body); padding: 8px 12px; border-radiu
 .acts { display: grid; gap: 8px }
 .act { display: grid; gap: 2px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--marker); border-radius: var(--r); color: var(--ink); text-decoration: none }
 .act .am { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums }
+.race { display: grid; gap: 6px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r) }
+.race.A { border-left: 4px solid var(--marker) } .race.B { border-left: 4px solid var(--accent) }
+.race .rh { display: flex; justify-content: space-between; gap: 8px; align-items: baseline }
+.race .rn { font: 700 20px/1.15 var(--display) }
+.race .rd { font: 600 15px/1 var(--display); color: var(--marker); white-space: nowrap; font-variant-numeric: tabular-nums }
+.race .rm { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums }
+.race .rf { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.race .warn { font-size: 13px; color: var(--marker); font-weight: 600 }
+.race button, .btnrow button { font: 500 13px var(--body); padding: 6px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px }
+.btnrow button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 600 }
+.btnrow button.danger { color: var(--marker); border-color: var(--marker) }
+.raceday { margin-top: 14px; padding: 12px 14px; border-radius: var(--r); background: var(--marker-soft); color: var(--ink) }
+.raceday b { font: 700 18px/1.2 var(--display) }
+form.rform { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px }
+form.rform label { display: grid; gap: 4px; font-size: 13px; color: var(--muted) }
+form.rform label.wide { grid-column: 1 / -1 }
+form.rform input, form.rform select, form.rform textarea { font: inherit; font-size: 15px; color: var(--ink); padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); width: 100% }
 .login { max-width: 420px; margin: 40px auto; display: grid; gap: 10px }
 .login input { font: inherit; padding: 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); color: var(--ink) }
 .login button { font: 600 15px var(--body); padding: 12px; border-radius: var(--r); border: 0; background: var(--accent); color: var(--surface); cursor: pointer }
@@ -206,6 +224,7 @@ footer.foot button { font: 500 13px var(--body); padding: 8px 12px; border-radiu
     <button class="tab" data-view="today" aria-selected="true">Hôm nay</button>
     <button class="tab" data-view="week" aria-selected="false">Tuần</button>
     <button class="tab" data-view="cap" aria-selected="false">Năng lực</button>
+    <button class="tab" data-view="races" aria-selected="false">Giải</button>
     <button class="tab" data-view="lib" aria-selected="false">Thư viện</button>
   </nav>
   <main id="main"><p class="loading">Đang tải giáo án…</p></main>

@@ -222,6 +222,47 @@ def nb_test(day: date, test_id: str, body: TestIn, athlete: int = Depends(auth))
     return {"ok": True}
 
 
+@app.get("/api/nb/races")
+def nb_races(athlete: int = Depends(auth)):
+    return notebook.list_races(athlete)
+
+
+class RaceIn(BaseModel):
+    name: str | None = Field(None, max_length=200)
+    race_date: date | None = None
+    location: str | None = Field(None, max_length=200)
+    distance_km: float | None = Field(None, gt=0, le=1000)
+    ascent_m: float | None = Field(None, ge=0, le=30000)
+    cutoff_h: float | None = Field(None, gt=0, le=400)
+    start_time: str | None = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    priority: str | None = Field(None, pattern="^[ABC]$")
+    status: str | None = None
+    register_by: date | None = None
+    change_by: date | None = None
+    url: str | None = Field(None, max_length=500)
+    notes: str | None = Field(None, max_length=5000)
+    plan_id: str | None = None
+    result_time_s: int | None = Field(None, gt=0)
+    result_note: str | None = Field(None, max_length=5000)
+
+
+@app.post("/api/nb/races")
+def nb_race_create(body: RaceIn, athlete: int = Depends(auth)):
+    return notebook.save_race(athlete, body.model_dump(exclude_unset=True))
+
+
+@app.put("/api/nb/races/{race_id}")
+def nb_race_update(race_id: int, body: RaceIn, athlete: int = Depends(auth)):
+    return notebook.save_race(athlete, body.model_dump(exclude_unset=True), race_id)
+
+
+@app.delete("/api/nb/races/{race_id}")
+def nb_race_delete(race_id: int, athlete: int = Depends(auth)):
+    if not notebook.delete_race(athlete, race_id):
+        raise HTTPException(404, "Không tìm thấy giải.")
+    return {"deleted": race_id}
+
+
 @app.post("/api/nb/import")
 async def nb_import(request: Request, athlete: int = Depends(auth)):
     """Import a backup file exported by the notebook (format "so-tap-trail")."""

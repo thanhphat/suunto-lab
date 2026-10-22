@@ -42,6 +42,8 @@ the athlete's note, tests, and the watch's activities side by side), then save y
 write_coach_note. Write coach notes in the athlete's language (Vietnamese), plain paragraphs, lines starting
 with "-" render as bullets. To build a plan for a new race: search_library for blocks/exercises to reference,
 add missing ones with save_library_item, then save_plan. Adjust single days with update_plan_days.
+The race calendar (list_races, save_race) holds every race of the season, with or without a plan: plan
+around A races, use B races as long training days inside an A plan, keep recovery between them.
 
 Metric definitions:
 {metrics.__doc__}
@@ -241,10 +243,28 @@ def update_plan_days(days: dict, plan_id: str | None = None) -> dict:
     return _nb(notebook.update_plan_days, athlete(), _plan_id(plan_id), days)
 
 
+@mcp.tool(annotations=RO)
+def list_races(start_date: str | None = None, end_date: str | None = None) -> list[dict]:
+    """Race calendar (all by default): date, distance, ascent, cutoff, priority (A goal race, B training
+    race, C fun), status (planned, registered, done, dnf, dns), deadlines, linked plan. ekm = km + ascent/100;
+    ekm_h_needed = pace to make the cutoff. Past races include the watch activity of that day and the
+    ekm_h actually held. Use it to plan a season and to judge whether a target distance is realistic."""
+    return notebook.list_races(athlete(), _d(start_date), _d(end_date))
+
+
+@mcp.tool(annotations=RW)
+def save_race(race: dict, race_id: int | None = None) -> dict:
+    """Add a race (no race_id) or update some fields of one (with race_id). Fields: name, race_date
+    (YYYY-MM-DD), location, distance_km, ascent_m, cutoff_h, start_time ('HH:MM'), priority A/B/C,
+    status planned/registered/done/dnf/dns, register_by, change_by (dates), url, notes, plan_id,
+    result_time_s (official time when it differs from the watch), result_note."""
+    return _nb(notebook.save_race, athlete(), race, race_id)
+
+
 ALLOWED_TABLES = ["athletes", "athlete_settings", "activities", "laps", "samples", "rr_intervals",
                   "activity_metrics", "splits", "daily_load", "v_activities", "v_weekly",
                   "plans", "plan_weeks", "plan_goals", "plan_items", "v_plan_days", "daily_notes",
-                  "test_results", "coach_notes", "nb_tests", "nb_blocks", "nb_exercises", "nb_categories"]
+                  "test_results", "coach_notes", "races", "nb_tests", "nb_blocks", "nb_exercises", "nb_categories"]
 
 
 @mcp.tool(annotations=RO)

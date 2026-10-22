@@ -302,6 +302,33 @@ CREATE TABLE IF NOT EXISTS coach_notes (
   PRIMARY KEY (athlete_id, kind, day)
 );
 
+-- Race calendar, independent of plans: registered or planned races, and results afterwards.
+-- priority A = goal race with its own plan, B = training race inside an A plan, C = for fun.
+CREATE TABLE IF NOT EXISTS races (
+  id             bigserial PRIMARY KEY,
+  athlete_id     bigint NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+  name           text NOT NULL,
+  race_date      date NOT NULL,
+  location       text,
+  distance_km    real CHECK (distance_km > 0),
+  ascent_m       real CHECK (ascent_m >= 0),
+  cutoff_h       real CHECK (cutoff_h > 0),
+  start_time     time,
+  priority       char(1) NOT NULL DEFAULT 'B' CHECK (priority IN ('A', 'B', 'C')),
+  status         text NOT NULL DEFAULT 'planned' CHECK (status IN ('planned', 'registered', 'done', 'dnf', 'dns')),
+  register_by    date,                          -- registration deadline
+  change_by      date,                          -- last day to change distance
+  url            text,
+  notes          text,
+  plan_id        text REFERENCES plans(id) ON DELETE SET NULL,
+  result_time_s  integer CHECK (result_time_s > 0),   -- official time; else taken from the watch
+  result_note    text,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (athlete_id, name, race_date)
+);
+CREATE INDEX IF NOT EXISTS races_by_date ON races (athlete_id, race_date);
+
 -- Plan items with the block / exercise name resolved: one row per thing to do on a day.
 CREATE OR REPLACE VIEW v_plan_days AS
 SELECT i.plan_id, p.athlete_id, i.day, i.idx, i.slot, i.ref,
@@ -322,6 +349,6 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM agent_ro;
 GRANT SELECT ON athletes, athlete_settings, activities, laps, samples, rr_intervals,
                 activity_metrics, splits, daily_load, v_activities, v_weekly,
                 nb_categories, nb_exercises, nb_blocks, nb_tests, plans, plan_weeks, plan_goals, plan_items,
-                daily_notes, test_results, coach_notes, v_plan_days TO agent_ro;
+                daily_notes, test_results, coach_notes, races, v_plan_days TO agent_ro;
 ALTER ROLE agent_ro SET statement_timeout = '8s';
 ALTER ROLE agent_ro SET default_transaction_read_only = on;

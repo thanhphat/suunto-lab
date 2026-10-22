@@ -61,7 +61,8 @@ raw `fit_files` + files on disk → canonical `activities/laps/samples/rr_interv
 - Library tables `nb_categories/nb_exercises/nb_blocks/nb_tests` store each item whole as jsonb `data` (the shape the web app renders); plans are `plans` → `plan_weeks` → `plan_goals`, plus `plan_items` (one row per thing to do on a day; `ref` is `#BLOCK` or `@exercise`; tick = `done_at`). Journal tables (`daily_notes`, `test_results`, `coach_notes`) are keyed by athlete + date, not plan, so they carry across plans. Week-level coach notes and test results use the plan week's start / end date.
 - Replacing a day's items (`_write_days`) carries ticks over to items with identical slot/label/ref; `save_plan` and `update_plan_days` validate refs against the library.
 - `static/notebook/app.js` is vanilla JS ported from an earlier standalone version: it loads library + plan + journal up front, renders synchronously, and writes each change with a `PUT /api/nb/...`. Export/import use the old `so-tap-trail` backup format (`import_legacy`).
-- `day_report` joins plan, journal and `v_activities` per day; it backs the MCP `get_day_report` tool used for "đánh giá ngày/tuần".
+- `races` is the season calendar, independent of plans (`plan_id` optional). `list_races` adds eKm/h needed for the cutoff and, for past races, the longest watch activity that day as the result.
+- `day_report` joins plan, journal, races and `v_activities` per day; it backs the MCP `get_day_report` tool used for "đánh giá ngày/tuần".
 
 **Web/API:** `api.py` serves `app/static/index.html` (single self-contained file, no build step) at `/`. All `/api/*` routes depend on `auth`, a single shared `API_TOKEN` (Bearer or `X-API-Token`); `/api/upload/raw` takes the raw body for the iOS Shortcut.
 

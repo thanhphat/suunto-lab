@@ -19,6 +19,8 @@ import json
 import re
 from datetime import date, timedelta
 
+import psycopg
+
 from . import db
 from .queries import clean
 
@@ -355,6 +357,7 @@ def day_report(athlete_id: int, start: date, end: date) -> list[dict]:
     plan_id = active_plan_id(athlete_id, start)
     plan = get_plan(athlete_id, plan_id, start, end) if plan_id else None
     j = journal(athlete_id, start, end)
+    races = list_races(athlete_id, start, end)
     with db.conn() as c:
         acts = c.execute("""SELECT id, local_date, name, sport, distance_km, moving_s, ascent_m, hr_avg, hr_max,
                                    gap_pace_s_km, trimp, decoupling_pct FROM v_activities
@@ -376,9 +379,96 @@ def day_report(athlete_id: int, start: date, end: date) -> list[dict]:
             "coach_note": j["coach"]["days"].get(k),
             "tests": [t for t in j["tests"] if t["day"] == k],
             "activities": [a for a in acts if a["local_date"] == d],
+            "races": [r for r in races if r["race_date"] == k],
         }))
         d += timedelta(days=1)
     return out
+
+
+# ---------------- race calendar ----------------
+
+RACE_FIELDS = ("name", "race_date", "location", "distance_km", "ascent_m", "cutoff_h", "start_time", "priority",
+               "status", "register_by", "change_by", "url", "notes", "plan_id", "result_time_s", "result_note")
+RACE_STATUS = ("planned", "registered", "done", "dnf", "dns")
+
+
+def _ekm(km, ascent) -> float | None:
+    """Effort km: distance plus 1 km per 100 m of climbing."""
+    return None if km is None else float(km) + float(ascent or 0) / 100
+
+
+def list_races(athlete_id: int, start: date | None = None, end: date | None = None) -> list[dict]:
+    """Races in a date range (default all), oldest first. Each race carries the eKm/h needed to make the
+    cutoff and, once run, the watch activity of that day with the eKm/h actually held."""
+    with db.conn() as c:
+        rows = c.execute("""SELECT r.*, p.name AS plan_name FROM races r LEFT JOIN plans p ON p.id = r.plan_id
+                            WHERE r.athlete_id=%s AND r.race_date BETWEEN %s AND %s ORDER BY r.race_date, r.id""",
+                         (athlete_id, start or date(1900, 1, 1), end or date(9999, 12, 31))).fetchall()
+        days = [r["race_date"] for r in rows if r["race_date"] <= date.today()]
+        acts = c.execute("""SELECT DISTINCT ON (local_date) id, local_date, name, distance_km, elapsed_s, moving_s,
+                                   ascent_m, hr_avg FROM v_activities
+                            WHERE athlete_id=%s AND local_date = ANY(%s)
+                            ORDER BY local_date, distance_km DESC NULLS LAST""", (athlete_id, days)).fetchall() if days else []
+    by_day = {a["local_date"]: a for a in acts}
+    out = []
+    for r in rows:
+        race = {k: r[k] for k in ("id", *RACE_FIELDS)} | {"plan_name": r["plan_name"]}
+        race["start_time"] = r["start_time"].strftime("%H:%M") if r["start_time"] else None
+        need = _ekm(r["distance_km"], r["ascent_m"])
+        race["ekm"] = round(need, 1) if need else None
+        race["ekm_h_needed"] = round(need / r["cutoff_h"], 2) if need and r["cutoff_h"] else None
+        a = by_day.get(r["race_date"])
+        if a:
+            secs = r["result_time_s"] or a["elapsed_s"]
+            got = _ekm(a["distance_km"], a["ascent_m"])
+            race["activity"] = {k: a[k] for k in ("id", "name", "distance_km", "elapsed_s", "moving_s", "ascent_m", "hr_avg")}
+            race["ekm_h"] = round(got / (secs / 3600), 2) if got and secs else None
+        out.append(clean(race))
+    return out
+
+
+def save_race(athlete_id: int, data: dict, race_id: int | None = None) -> dict:
+    """Create a race, or update the given fields of an existing one."""
+    fields = {k: data[k] for k in RACE_FIELDS if k in data}
+    for k in ("name", "location", "url", "notes", "result_note", "plan_id", "start_time"):
+        if isinstance(fields.get(k), str):
+            fields[k] = fields[k].strip() or None
+    for k in ("race_date", "register_by", "change_by"):
+        if fields.get(k):
+            fields[k] = _day(fields[k])
+    if fields.get("priority", "B") not in ("A", "B", "C"):
+        raise NotebookError("priority phải là A, B hoặc C")
+    if fields.get("status", "planned") not in RACE_STATUS:
+        raise NotebookError(f"status phải là một trong {RACE_STATUS}")
+    if race_id is None and (not fields.get("name") or not fields.get("race_date")):
+        raise NotebookError("Cần tên giải và ngày (race_date)")
+    with db.conn() as c, c.transaction():
+        if fields.get("plan_id") and not c.execute("SELECT 1 FROM plans WHERE id=%s AND athlete_id=%s",
+                                                   (fields["plan_id"], athlete_id)).fetchone():
+            raise NotebookError(f"Không có giáo án {fields['plan_id']!r}")
+        try:
+            if race_id is None:
+                cols = ", ".join(fields)
+                r = c.execute(f"INSERT INTO races (athlete_id, {cols}) VALUES (%s, {', '.join(['%s'] * len(fields))}) "
+                              "RETURNING id", (athlete_id, *fields.values())).fetchone()
+            else:
+                if not fields:
+                    raise NotebookError("Không có trường nào để cập nhật")
+                sets = ", ".join(f"{k}=%s" for k in fields)
+                r = c.execute(f"UPDATE races SET {sets}, updated_at=now() WHERE id=%s AND athlete_id=%s RETURNING id",
+                              (*fields.values(), race_id, athlete_id)).fetchone()
+                if not r:
+                    raise NotebookError(f"Không có giải #{race_id}")
+        except psycopg.errors.UniqueViolation:
+            raise NotebookError("Đã có giải cùng tên và ngày")
+        except psycopg.errors.CheckViolation as e:
+            raise NotebookError(f"Giá trị không hợp lệ: {e.diag.constraint_name}")
+    return {"id": r["id"], "saved": True}
+
+
+def delete_race(athlete_id: int, race_id: int) -> bool:
+    with db.conn() as c:
+        return c.execute("DELETE FROM races WHERE id=%s AND athlete_id=%s", (race_id, athlete_id)).rowcount > 0
 
 
 # ---------------- loading and legacy import ----------------
