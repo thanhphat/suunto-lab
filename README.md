@@ -126,12 +126,14 @@ Dữ liệu chia ba tầng. Tầng dưới là nguồn, tầng trên luôn tính
 ## Phát triển
 
 ```bash
-pip install -r requirements.txt
+uv sync                                            # cài Python 3.15 và thư viện vào .venv
 export DATABASE_URL=postgresql://suunto:suunto@localhost:5432/suunto API_TOKEN=dev MCP_TOKEN=dev
-uvicorn app.api:app --reload --port 8000     # web + API
-python -m app.worker                         # hàng đợi
-python -m app.mcp_server --http 8001         # MCP
+uv run uvicorn app.api:app --reload --port 8000     # web + API
+uv run python -m app.worker                         # hàng đợi
+uv run python -m app.mcp_server --http 8001         # MCP
 ```
+
+Thêm hoặc nâng thư viện bằng `uv add <gói>` / `uv lock --upgrade`, rồi commit cả `pyproject.toml` và `uv.lock`.
 
 `samples/` chứa vài file FIT **tổng hợp** (do script tạo ra) để chạy thử. Đây không phải dữ liệu thật.
 
