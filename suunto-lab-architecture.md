@@ -127,7 +127,7 @@ Mở `/notebook` (hoặc nút *Sổ tập* trên dashboard), đăng nhập bằn
 - **Hôm nay**: việc theo buổi sáng/trưa/chiều/mỗi ngày, bấm vào tên để mở hướng dẫn bài, ghi chú ngày, các buổi đồng hồ ghi nhận trong ngày.
 - **Tuần**: checklist mục tiêu tuần, phần trăm hoàn thành từng ngày.
 - **Năng lực**: bộ tự kiểm tra hằng tuần, so với mục tiêu và tuần trước.
-- **Giải**: lịch giải cả mùa, kể cả giải đăng ký trước chưa có giáo án. Ưu tiên A (giải chính, có giáo án riêng), B (giải tập nằm trong giáo án A), C (chạy vui). Hiện eKm/h cần để kịp cutoff (eKm = km + D+/100), nhắc hạn đăng ký và hạn đổi cự ly, và sau ngày đua tự ghép buổi chạy đồng hồ ghi nhận để ra kết quả.
+- **Giải**: lịch giải cả mùa, kể cả giải đăng ký trước chưa có giáo án. Mỗi giải có **độ khó tính riêng cho bạn** (1–5): thời gian về đích dự kiến từ các buổi dài gần đây (kiểu Riegel, mũ 1,10) so với cutoff, giới hạn theo độ dài cung đường, cộng thêm khi giải trước đó quá gần. Bấm vào giải để xem trang chi tiết: số liệu, checkpoint, thông tin giải và phần phân tích của Claude. Giải sắp tới cũng hiện ở đầu dashboard và tab Hôm nay. Ưu tiên A (giải chính, có giáo án riêng), B (giải tập nằm trong giáo án A), C (chạy vui). Hiện eKm/h cần để kịp cutoff (eKm = km + D+/100), nhắc hạn đăng ký và hạn đổi cự ly, và sau ngày đua tự ghép buổi chạy đồng hồ ghi nhận để ra kết quả.
 - **Thư viện**: bài tập và mẫu buổi tập dùng chung cho mọi giáo án.
 
 Mỗi giải hoặc mục tiêu là một giáo án riêng; ghi chú và kết quả test gắn với ngày nên đi xuyên qua các giáo án. Muốn có giáo án mới, nhờ agent qua MCP (`save_plan`), hoặc nạp file JSON (định dạng ở docstring đầu `app/notebook.py`).

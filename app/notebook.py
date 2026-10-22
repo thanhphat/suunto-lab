@@ -387,9 +387,16 @@ def day_report(athlete_id: int, start: date, end: date) -> list[dict]:
 
 # ---------------- race calendar ----------------
 
-RACE_FIELDS = ("name", "race_date", "location", "distance_km", "ascent_m", "cutoff_h", "start_time", "priority",
-               "status", "register_by", "change_by", "url", "notes", "plan_id", "result_time_s", "result_note")
+RACE_FIELDS = ("name", "race_date", "location", "distance_km", "ascent_m", "descent_m", "cutoff_h", "start_time",
+               "priority", "status", "register_by", "change_by", "url", "notes", "plan_id", "result_time_s",
+               "result_note", "checkpoints", "analysis")
 RACE_STATUS = ("planned", "registered", "done", "dnf", "dns")
+LEVELS = ("", "Nhẹ", "Vừa", "Khó", "Rất khó", "Cực khó")
+# Finish time grows faster than effort distance on long trail races: t2 = t1 * (e2 / e1) ** RIEGEL_K.
+RIEGEL_K = 1.10
+REF_MIN_S = 3 * 3600        # efforts used as reference: at least 3 h elapsed ...
+REF_WINDOW_DAYS = 180       # ... within this many days before the race (or before today for upcoming races)
+RECOVERY_DAYS = 21          # a big race (>= 60 eKm) closer than this before another one costs recovery
 
 
 def _ekm(km, ascent) -> float | None:
@@ -397,32 +404,102 @@ def _ekm(km, ascent) -> float | None:
     return None if km is None else float(km) + float(ascent or 0) / 100
 
 
+def _hm(hours: float) -> str:
+    h, m = divmod(round(hours * 60), 60)
+    return f"{h}h{m:02d}"
+
+
+def _thousands(x: float) -> str:
+    return f"{x:,.0f}".replace(",", ".")
+
+
+def _difficulty(race: dict, refs: list[dict], prev: dict | None) -> dict:
+    """Rate a race 1-5 for this athlete. The level comes from the projected finish against the cutoff
+    (Riegel-style from the best recent long effort): >= 30 % spare -> 2, >= 15 % -> 3, >= 0 -> 4, over -> 5.
+    Short courses are capped (< 25 eKm at 2, < 45 eKm at 3); without a projection the course size decides.
+    A big race (>= 60 eKm) less than RECOVERY_DAYS before adds one level."""
+    ekm = race["ekm"]
+    if not ekm:
+        return {"level": None, "label": "Chưa đủ dữ liệu", "reasons": ["Cần cự ly (và D+) để đánh giá."]}
+    km, asc = float(race["distance_km"]), float(race["ascent_m"] or 0)
+    course = 1 + sum(ekm >= t for t in (25, 45, 75, 115))
+    reasons = [f"Cung đường {ekm:.0f} eKm: " + f"{km:g}".replace(".", ",") + f" km, +{_thousands(asc)} m"
+               + (f", trung bình {asc / km:.0f} m leo mỗi km" if km and asc / km >= 50 else "")]
+    out: dict = {}
+    best = None
+    for r in refs:
+        e = _ekm(r["distance_km"], r["ascent_m"])
+        t = r["elapsed_s"] / 3600 * (ekm / e) ** RIEGEL_K
+        if best is None or t < best[0]:
+            best = (t, r, e)
+    level = course
+    if best:
+        t, r, e = best
+        out |= {"est_hours": round(t, 2), "est_from": {"date": r["local_date"], "ekm": round(e, 1),
+                                                        "hours": round(r["elapsed_s"] / 3600, 1)}}
+        basis = f"ước tính từ buổi {r['local_date']:%d/%m}: {e:.0f} eKm trong {_hm(r['elapsed_s'] / 3600)}"
+        if race["cutoff_h"]:
+            cut = float(race["cutoff_h"])
+            margin = (cut - t) / cut
+            out["margin_pct"] = round(margin * 100)
+            level = 2 if margin >= 0.3 else 3 if margin >= 0.15 else 4 if margin >= 0 else 5
+            if margin < 0:
+                reasons.append(f"Dự kiến ~{_hm(t)}, quá cutoff {_hm(cut)} khoảng {_hm(t - cut)} ({basis})")
+            else:
+                word = "Sát cutoff" if margin < 0.05 else "Vừa đủ" if margin < 0.15 else "Dư thời gian"
+                reasons.append(f"{word}: dự kiến ~{_hm(t)}, cutoff {_hm(cut)}, dư {round(margin * 100)}% ({basis})")
+            level = min(level, 2 if ekm < 25 else 3 if ekm < 45 else 5)
+        else:
+            reasons.append(f"Dự kiến ~{_hm(t)}, chưa có cutoff để so ({basis})")
+    else:
+        reasons.append("Chưa có buổi dài từ 3 giờ trong 6 tháng để ước tính thời gian")
+    if prev:
+        gap = (race["_date"] - prev["race_date"]).days
+        if gap < RECOVERY_DAYS and (_ekm(prev["distance_km"], prev["ascent_m"]) or 0) >= 60:
+            level += 1
+            reasons.append(f"Chỉ {gap} ngày sau {prev['name']}: chưa kịp hồi phục hoàn toàn")
+    level = max(1, min(5, level))
+    label = "Vượt sức hiện tại" if out.get("margin_pct", 0) < 0 else LEVELS[level]
+    return {"level": level, "label": label, "reasons": reasons, **out}
+
+
 def list_races(athlete_id: int, start: date | None = None, end: date | None = None) -> list[dict]:
     """Races in a date range (default all), oldest first. Each race carries the eKm/h needed to make the
-    cutoff and, once run, the watch activity of that day with the eKm/h actually held."""
+    cutoff, a difficulty rating for this athlete (level 1-5, reasons, projected finish time), and once
+    run, the watch activity of that day with the eKm/h actually held."""
+    today = date.today()
     with db.conn() as c:
-        rows = c.execute("""SELECT r.*, p.name AS plan_name FROM races r LEFT JOIN plans p ON p.id = r.plan_id
-                            WHERE r.athlete_id=%s AND r.race_date BETWEEN %s AND %s ORDER BY r.race_date, r.id""",
-                         (athlete_id, start or date(1900, 1, 1), end or date(9999, 12, 31))).fetchall()
-        days = [r["race_date"] for r in rows if r["race_date"] <= date.today()]
-        acts = c.execute("""SELECT DISTINCT ON (local_date) id, local_date, name, distance_km, elapsed_s, moving_s,
-                                   ascent_m, hr_avg FROM v_activities
-                            WHERE athlete_id=%s AND local_date = ANY(%s)
-                            ORDER BY local_date, distance_km DESC NULLS LAST""", (athlete_id, days)).fetchall() if days else []
-    by_day = {a["local_date"]: a for a in acts}
+        all_rows = c.execute("""SELECT r.*, p.name AS plan_name FROM races r LEFT JOIN plans p ON p.id = r.plan_id
+                                WHERE r.athlete_id=%s ORDER BY r.race_date, r.id""", (athlete_id,)).fetchall()
+        efforts = c.execute("""SELECT id, local_date, name, distance_km, elapsed_s, moving_s, ascent_m, hr_avg
+                               FROM v_activities WHERE athlete_id=%s AND distance_km > 0 ORDER BY local_date""",
+                            (athlete_id,)).fetchall()
+    longest_on: dict = {}
+    for a in efforts:
+        if a["local_date"] not in longest_on or a["distance_km"] > longest_on[a["local_date"]]["distance_km"]:
+            longest_on[a["local_date"]] = a
+    lo, hi = start or date(1900, 1, 1), end or date(9999, 12, 31)
     out = []
-    for r in rows:
+    for n, r in enumerate(all_rows):
+        if not (lo <= r["race_date"] <= hi):
+            continue
         race = {k: r[k] for k in ("id", *RACE_FIELDS)} | {"plan_name": r["plan_name"]}
         race["start_time"] = r["start_time"].strftime("%H:%M") if r["start_time"] else None
         need = _ekm(r["distance_km"], r["ascent_m"])
         race["ekm"] = round(need, 1) if need else None
         race["ekm_h_needed"] = round(need / r["cutoff_h"], 2) if need and r["cutoff_h"] else None
-        a = by_day.get(r["race_date"])
+        race["days_to"] = (r["race_date"] - today).days
+        a = longest_on.get(r["race_date"]) if r["race_date"] <= today else None
         if a:
             secs = r["result_time_s"] or a["elapsed_s"]
             got = _ekm(a["distance_km"], a["ascent_m"])
             race["activity"] = {k: a[k] for k in ("id", "name", "distance_km", "elapsed_s", "moving_s", "ascent_m", "hr_avg")}
             race["ekm_h"] = round(got / (secs / 3600), 2) if got and secs else None
+        ref_end = min(r["race_date"], today)
+        refs = [e for e in efforts if e["elapsed_s"] >= REF_MIN_S and e["local_date"] < ref_end
+                and (ref_end - e["local_date"]).days <= REF_WINDOW_DAYS]
+        prev = next((x for x in reversed(all_rows[:n]) if x["race_date"] < r["race_date"]), None)
+        race["difficulty"] = _difficulty(race | {"_date": r["race_date"]}, refs, prev)
         out.append(clean(race))
     return out
 
@@ -430,7 +507,12 @@ def list_races(athlete_id: int, start: date | None = None, end: date | None = No
 def save_race(athlete_id: int, data: dict, race_id: int | None = None) -> dict:
     """Create a race, or update the given fields of an existing one."""
     fields = {k: data[k] for k in RACE_FIELDS if k in data}
-    for k in ("name", "location", "url", "notes", "result_note", "plan_id", "start_time"):
+    if "checkpoints" in fields:
+        cps = fields["checkpoints"] or []
+        if not isinstance(cps, list) or not all(isinstance(x, dict) and x.get("name") for x in cps):
+            raise NotebookError("checkpoints là danh sách {name, km, cutoff, note}")
+        fields["checkpoints"] = db.Jsonb(cps)
+    for k in ("name", "location", "url", "notes", "result_note", "plan_id", "start_time", "analysis"):
         if isinstance(fields.get(k), str):
             fields[k] = fields[k].strip() or None
     for k in ("race_date", "register_by", "change_by"):

@@ -245,19 +245,22 @@ def update_plan_days(days: dict, plan_id: str | None = None) -> dict:
 
 @mcp.tool(annotations=RO)
 def list_races(start_date: str | None = None, end_date: str | None = None) -> list[dict]:
-    """Race calendar (all by default): date, distance, ascent, cutoff, priority (A goal race, B training
-    race, C fun), status (planned, registered, done, dnf, dns), deadlines, linked plan. ekm = km + ascent/100;
-    ekm_h_needed = pace to make the cutoff. Past races include the watch activity of that day and the
-    ekm_h actually held. Use it to plan a season and to judge whether a target distance is realistic."""
+    """Race calendar (all by default): date, distance, ascent/descent, cutoff, checkpoints, priority (A goal
+    race, B training race, C fun), status (planned, registered, done, dnf, dns), deadlines, linked plan,
+    coach analysis. ekm = km + ascent/100; ekm_h_needed = pace to make the cutoff. `difficulty` rates the
+    race 1-5 for this athlete with reasons and a projected finish time from recent long efforts. Past races
+    include the watch activity of that day and the ekm_h actually held."""
     return notebook.list_races(athlete(), _d(start_date), _d(end_date))
 
 
 @mcp.tool(annotations=RW)
 def save_race(race: dict, race_id: int | None = None) -> dict:
     """Add a race (no race_id) or update some fields of one (with race_id). Fields: name, race_date
-    (YYYY-MM-DD), location, distance_km, ascent_m, cutoff_h, start_time ('HH:MM'), priority A/B/C,
-    status planned/registered/done/dnf/dns, register_by, change_by (dates), url, notes, plan_id,
-    result_time_s (official time when it differs from the watch), result_note."""
+    (YYYY-MM-DD), location, distance_km, ascent_m, descent_m, cutoff_h, start_time ('HH:MM'), priority A/B/C,
+    status planned/registered/done/dnf/dns, register_by, change_by (dates), url, notes (facts: terrain,
+    aid stations, gear), checkpoints [{name, km, cutoff, note}], analysis (your coaching analysis of this
+    race for the athlete: what makes it hard for them, targets, strategy; plain paragraphs, "-" bullets),
+    plan_id, result_time_s (official time when it differs from the watch), result_note."""
     return _nb(notebook.save_race, athlete(), race, race_id)
 
 

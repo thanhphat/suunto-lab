@@ -233,6 +233,7 @@ class RaceIn(BaseModel):
     location: str | None = Field(None, max_length=200)
     distance_km: float | None = Field(None, gt=0, le=1000)
     ascent_m: float | None = Field(None, ge=0, le=30000)
+    descent_m: float | None = Field(None, ge=0, le=30000)
     cutoff_h: float | None = Field(None, gt=0, le=400)
     start_time: str | None = Field(None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     priority: str | None = Field(None, pattern="^[ABC]$")
@@ -244,6 +245,8 @@ class RaceIn(BaseModel):
     plan_id: str | None = None
     result_time_s: int | None = Field(None, gt=0)
     result_note: str | None = Field(None, max_length=5000)
+    checkpoints: list[dict] | None = None
+    analysis: str | None = Field(None, max_length=20000)
 
 
 @app.post("/api/nb/races")

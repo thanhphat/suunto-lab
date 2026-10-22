@@ -328,6 +328,11 @@ CREATE TABLE IF NOT EXISTS races (
   UNIQUE (athlete_id, name, race_date)
 );
 CREATE INDEX IF NOT EXISTS races_by_date ON races (athlete_id, race_date);
+ALTER TABLE races ADD COLUMN IF NOT EXISTS descent_m real CHECK (descent_m >= 0);
+-- [{"name": "CP2", "km": 21.5, "cutoff": "11:30", "note": "..."}], cutoff as clock time or "+6:30" from start
+ALTER TABLE races ADD COLUMN IF NOT EXISTS checkpoints jsonb NOT NULL DEFAULT '[]';
+-- Coach analysis of the race for this athlete (written by Claude), shown on the race page.
+ALTER TABLE races ADD COLUMN IF NOT EXISTS analysis text;
 
 -- Plan items with the block / exercise name resolved: one row per thing to do on a day.
 CREATE OR REPLACE VIEW v_plan_days AS

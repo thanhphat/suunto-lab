@@ -49,6 +49,16 @@ h2 { font-size: 20px; text-transform: uppercase; }
 .muted { color: var(--muted); }
 section { margin-top: 22px; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.races { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.racec { display: grid; gap: 6px; padding: 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); color: var(--ink); text-decoration: none; }
+.racec.l1, .racec.l2 { border-left-color: var(--good); } .racec.l3 { border-left-color: var(--warn); } .racec.l4, .racec.l5 { border-left-color: var(--bad); }
+.racec .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.racec .nm { font: 600 18px/1.15 var(--display); }
+.racec .dd { font: 600 22px/1 var(--display); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.racec .dd small { font: 500 12px var(--body); color: var(--muted); margin-left: 2px; }
+.racec .lv { font: 700 12px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.racec.l1 .lv, .racec.l2 .lv { color: var(--good); } .racec.l3 .lv { color: var(--warn); } .racec.l4 .lv, .racec.l5 .lv { color: var(--bad); }
+.racec .meta { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .grid { display: grid; gap: 12px; }
 .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
@@ -217,12 +227,31 @@ function acwrChip(load) {
   return `<span class="chip" style="color:${col}" title="Tỉ lệ tải cấp tính / mãn tính (ATL ÷ CTL)">${txt} · ${r.toFixed(2)}</span>`;
 }
 
+const nfv = (x) => Number(x).toLocaleString("vi-VN", { maximumFractionDigits: 2 });
+function raceStrip(races) {
+  const up = races.filter((r) => r.days_to >= 0 && r.status !== "dns").slice(0, 4);
+  if (!up.length) return "";
+  const hm = (h) => `${Math.floor(h)}h${String(Math.round((h % 1) * 60)).padStart(2, "0")}`;
+  return `<section><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2>Giải sắp tới</h2><a class="muted" href="/notebook#races">Lịch giải →</a></div>
+    <div class="races">${up.map((r) => {
+      const d = r.difficulty || {};
+      const est = d.est_hours && r.cutoff_h ? `Dự kiến ~${hm(d.est_hours)} / cutoff ${hm(r.cutoff_h)}` : "";
+      return `<a class="racec l${d.level || 1}" href="/notebook#rv/${r.id}">
+        <div class="top"><span class="nm">${r.priority === "A" ? "★ " : ""}${esc(r.name)}</span><span class="dd">${r.days_to}<small>ngày</small></span></div>
+        <div class="lv">${"▮".repeat(d.level || 0)}${"▯".repeat(5 - (d.level || 0))} ${esc(d.label || "")}</div>
+        <div class="meta">${[r.distance_km && nfv(r.distance_km) + " km", r.ascent_m && "+" + nfv(Math.round(r.ascent_m)) + " m", r.ekm_h_needed && "cần " + nfv(r.ekm_h_needed) + " eKm/h"].filter(Boolean).join(" · ")}</div>
+        ${est ? `<div class="meta">${est}</div>` : ""}
+      </a>`;
+    }).join("")}</div></section>`;
+}
+
 async function renderHome() {
   app.innerHTML = `<section><div class="muted">Đang tải…</div></section>`;
   const [ov, weekly, list, load, files] = await Promise.all([
     api("/api/overview"), api("/api/weekly?weeks=12"), api("/api/activities?limit=60"),
     api("/api/load?start=" + isoDaysAgo(90)), api("/api/files?limit=8"),
   ]);
+  const races = await api("/api/nb/races").catch(() => []);
   Object.assign(state, { overview: ov, weekly, list });
   if (!list.length) {
     app.innerHTML = `<section class="panel empty"><h2>Chưa có bài tập nào</h2>
@@ -230,7 +259,7 @@ async function renderHome() {
     return;
   }
   const a = ov.last_7d, b = ov.prev_7d, l = ov.load;
-  app.innerHTML = `
+  app.innerHTML = `${raceStrip(races)}
   <section>
     <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2>7 ngày qua</h2>${acwrChip(l)}</div>
     <div class="stats">

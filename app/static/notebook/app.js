@@ -90,44 +90,81 @@
     });
     return out.join(' · ');
   }
+  function nf(x) { return Number(x).toLocaleString('vi-VN', { maximumFractionDigits: 2 }); }
+  function lvlBadge(d) {
+    if (!d || !d.level) return '<span class="lvl l1">Chưa đánh giá</span>';
+    var pips = ''; for (var k = 1; k <= 5; k++) pips += '<b' + (k <= d.level ? ' class="on"' : '') + '></b>';
+    return '<span class="lvl l' + d.level + '"><i>' + pips + '</i>' + esc(d.label) + '</span>';
+  }
+  function countTxt(r) { var n = r.days_to; return n > 0 ? 'còn ' + n + ' ngày' : (n === 0 ? 'hôm nay' : fmt(r.race_date) + '/' + r.race_date.slice(2, 4)); }
+  function estBar(r) {
+    var d = r.difficulty || {}; if (!d.est_hours || !r.cutoff_h) return '';
+    var max = Math.max(d.est_hours, r.cutoff_h) * 1.08, over = d.est_hours > r.cutoff_h;
+    return '<div class="rm">Dự kiến <b>' + hms(d.est_hours * 3600) + '</b> · cutoff ' + hms(r.cutoff_h * 3600) + '</div>' +
+      '<div class="estbar" aria-hidden="true"><span style="width:' + (d.est_hours / max * 100) + '%;background:' + (over ? '#c0392b' : (d.margin_pct < 5 ? 'var(--marker)' : 'var(--accent)')) + '"></span><em style="left:' + (r.cutoff_h / max * 100) + '%"></em></div>';
+  }
   function raceCard(r) {
-    var n = daysTo(r.race_date), past = n < 0, w = raceWarn(r), res = '';
-    if (r.activity) res = '<div class="rm">Kết quả: ' + hms(r.result_time_s || r.activity.elapsed_s) + ' · ' + r.activity.distance_km + ' km · +' + Math.round(r.activity.ascent_m || 0) + ' m' +
-      (r.ekm_h ? ' · ' + r.ekm_h + ' eKm/h' : '') + ' · <a href="/#a' + r.activity.id + '">xem buổi chạy</a></div>';
-    return '<div class="race ' + r.priority + '"><div class="rh"><span class="rn">' + esc(r.name) + '</span><span class="rd">' + fmt(r.race_date) + '/' + r.race_date.slice(2, 4) +
-      (past ? '' : (n === 0 ? ' · hôm nay' : ' · còn ' + n + ' ngày')) + '</span></div>' +
-      '<div class="rm">' + esc([r.location, raceMeta(r)].filter(Boolean).join(' · ')) + '</div>' + res +
-      (r.result_note ? '<div class="rm">' + esc(r.result_note) + '</div>' : '') +
-      (w ? '<div class="warn">' + esc(w) + '</div>' : '') +
-      '<div class="rf"><span class="tag' + (r.priority === 'A' ? ' test' : '') + '">' + PRIO[r.priority] + '</span><span class="tag">' + RSTATUS[r.status] + '</span>' +
-      (r.plan_id ? '<span class="small">Giáo án: ' + esc(r.plan_name || r.plan_id) + '</span>' : '') +
-      (r.url ? '<a class="small" href="' + esc(r.url) + '" target="_blank" rel="noopener">Trang giải</a>' : '') +
-      '<span style="flex:1"></span><button data-act="redit" data-race="' + r.id + '">Sửa</button></div></div>';
+    var past = r.days_to < 0, w = raceWarn(r), res = '';
+    if (r.activity) res = '<div class="rm">Kết quả: ' + hms(r.result_time_s || r.activity.elapsed_s) + ' · ' + r.activity.distance_km + ' km · +' + Math.round(r.activity.ascent_m || 0) + ' m' + (r.ekm_h ? ' · ' + r.ekm_h + ' eKm/h' : '') + '</div>';
+    var d = r.difficulty || {};
+    return '<div class="race ' + r.priority + '" data-rv="' + r.id + '" role="link" tabindex="0"><div class="rh"><span class="rn">' + esc(r.name) + '</span><span class="rd">' + countTxt(r) + '</span></div>' +
+      '<div class="rf">' + lvlBadge(d) + '<span class="tag' + (r.priority === 'A' ? ' test' : '') + '">' + PRIO[r.priority] + '</span><span class="tag">' + RSTATUS[r.status] + '</span><span class="small">' + fmt(r.race_date) + (r.start_time ? ' · ' + r.start_time : '') + (r.location ? ' · ' + esc(r.location) : '') + '</span></div>' +
+      '<div class="big">' + (r.distance_km ? '<span>' + nf(r.distance_km) + '<small>km</small></span>' : '') + (r.ascent_m ? '<span>+' + nf(Math.round(r.ascent_m)) + '<small>m</small></span>' : '') +
+      (r.cutoff_h ? '<span>' + hms(r.cutoff_h * 3600) + '<small>cutoff</small></span>' : '') + (r.ekm_h_needed ? '<span>' + nf(r.ekm_h_needed) + '<small>eKm/h cần</small></span>' : '') + '</div>' +
+      (past ? res : estBar(r)) +
+      (d.reasons && !past ? '<ul class="why">' + d.reasons.slice(1).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+      (w ? '<div class="warn">' + esc(w) + '</div>' : '') + '</div>';
   }
   function renderRaces(main) {
-    var t = today(), up = RACES.filter(function (r) { return r.race_date >= t; }), past = RACES.filter(function (r) { return r.race_date < t; }).reverse();
+    var up = RACES.filter(function (r) { return r.days_to >= 0; }), past = RACES.filter(function (r) { return r.days_to < 0; }).reverse();
     var h = '<section class="dayhead" style="grid-template-columns:1fr"><div class="daytitle"><div class="eyebrow">Lịch giải</div><h2>' + up.length + ' giải sắp tới</h2>' +
-      '<div class="small">eKm = km + D+/100. "Cần" là tốc độ trung bình để kịp cutoff.</div></div></section>' +
+      '<div class="small">Độ khó tính cho riêng bạn: cung đường, thời gian dự kiến so với cutoff, khoảng hồi phục giữa các giải. Bấm vào giải để xem chi tiết.</div></div></section>' +
       '<div class="btnrow" style="justify-content:center"><button class="primary" data-act="radd">+ Thêm giải</button></div>';
     h += '<section class="slot"><h3>Sắp tới</h3><div class="acts">' + (up.length ? up.map(raceCard).join('') : '<p class="small">Chưa có giải nào. Thêm giải bạn đã đăng ký hoặc đang dự định.</p>') + '</div></section>';
     if (past.length) h += '<section class="slot"><h3>Đã qua</h3><div class="acts">' + past.map(raceCard).join('') + '</div></section>';
     main.innerHTML = h;
+  }
+  function paras(t) { return String(t || '').split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean).map(function (x) { return x.charAt(0) === '-' ? '<li>' + esc(x.slice(1).trim()) + '</li>' : '<p>' + esc(x) + '</p>'; }).join('').replace(/(<li>.*?<\/li>)+/g, function (m) { return '<ul>' + m + '</ul>'; }); }
+  function raceView(r) {
+    var d = r.difficulty || {}, w = raceWarn(r);
+    var facts = [['Ngày', fmt(r.race_date) + '/' + r.race_date.slice(0, 4) + (r.start_time ? ', ' + r.start_time : '')], ['Cự ly', r.distance_km ? nf(r.distance_km) + ' km' : ''],
+      ['Leo / xuống', (r.ascent_m ? '+' + nf(Math.round(r.ascent_m)) + ' m' : '') + (r.descent_m ? ' / −' + nf(Math.round(r.descent_m)) + ' m' : '')], ['Cutoff', r.cutoff_h ? hms(r.cutoff_h * 3600) : ''],
+      ['Effort', r.ekm ? nf(r.ekm) + ' eKm' : ''], ['Tốc độ cần', r.ekm_h_needed ? nf(r.ekm_h_needed) + ' eKm/h' : ''],
+      ['Dự kiến (sức hiện tại)', d.est_hours ? hms(d.est_hours * 3600) + (d.margin_pct != null ? ' (' + (d.margin_pct >= 0 ? 'dư ' : 'thiếu ') + Math.abs(d.margin_pct) + '%)' : '') : ''],
+      ['Ưu tiên · trạng thái', PRIO[r.priority] + ' · ' + RSTATUS[r.status]], ['Giáo án', r.plan_name || ''], ['Hạn đăng ký', r.register_by ? fmt(r.register_by) : ''], ['Hạn đổi cự ly', r.change_by ? fmt(r.change_by) : '']]
+      .filter(function (f) { return f[1]; });
+    var cps = r.checkpoints || [];
+    return '<div class="eyebrow">' + esc(r.location || 'Giải') + ' · ' + countTxt(r) + '</div><h2>' + esc(r.name) + '</h2>' +
+      '<div class="rf" style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">' + lvlBadge(d) + '</div>' +
+      (d.reasons ? '<ul>' + d.reasons.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+      (w ? '<div class="stop">' + esc(w) + '</div>' : '') +
+      '<dl class="facts">' + facts.map(function (f) { return '<div><dt>' + f[0] + '</dt><dd>' + esc(f[1]) + '</dd></div>'; }).join('') + '</dl>' +
+      (r.activity ? '<p>Kết quả: <b>' + hms(r.result_time_s || r.activity.elapsed_s) + '</b> · ' + r.activity.distance_km + ' km · ' + (r.ekm_h || '–') + ' eKm/h · <a href="/#a' + r.activity.id + '">xem buổi chạy</a></p>' : '') +
+      (r.analysis ? coachHtml(r.analysis, 'Phân tích của Claude') : '') +
+      (cps.length ? '<h3>Checkpoint</h3><div class="capwrap"><table class="cap"><thead><tr><th>CP</th><th class="num">Km</th><th class="num">Cutoff</th><th>Ghi chú</th></tr></thead><tbody>' +
+        cps.map(function (c) { return '<tr><td>' + esc(c.name) + '</td><td class="num">' + esc(c.km == null ? '' : c.km) + '</td><td class="num">' + esc(c.cutoff || '') + '</td><td>' + esc(c.note || '') + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
+      (r.notes ? '<h3>Thông tin giải</h3><div class="lead" style="font-size:15px">' + paras(r.notes) + '</div>' : '') +
+      (r.result_note ? '<h3>Ghi chú kết quả</h3>' + paras(r.result_note) : '') +
+      '<div class="btnrow"><button data-act="redit" data-race="' + r.id + '">Sửa thông tin</button>' + (r.url ? '<a class="small" style="align-self:center" href="' + esc(r.url) + '" target="_blank" rel="noopener">Trang giải ↗</a>' : '') + '</div>';
   }
   function raceForm(r) {
     r = r || { priority: 'B', status: 'planned' };
     function inp(name, label, type, extra) { return '<label' + (extra && extra.wide ? ' class="wide"' : '') + '>' + label + '<input name="' + name + '" type="' + type + '"' + (extra && extra.step ? ' step="' + extra.step + '"' : '') + ' value="' + esc(r[name] == null ? '' : r[name]) + '"' + (extra && extra.req ? ' required' : '') + '></label>'; }
     function sel(name, label, opts) { return '<label>' + label + '<select name="' + name + '">' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + ((r[name] || '') === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></label>'; }
     var rt = r.result_time_s ? Math.floor(r.result_time_s / 3600) + ':' + String(Math.round(r.result_time_s % 3600 / 60)).padStart(2, '0') : '';
+    var cps = (r.checkpoints || []).map(function (c) { return [c.name, c.km == null ? '' : c.km, c.cutoff || '', c.note || ''].join(' | '); }).join('\n');
     return '<div class="eyebrow">Lịch giải</div><h2>' + (r.id ? 'Sửa giải' : 'Thêm giải') + '</h2>' +
       '<form class="rform" id="rform" data-id="' + (r.id || '') + '">' +
       inp('name', 'Tên giải', 'text', { wide: true, req: true }) + inp('race_date', 'Ngày đua', 'date', { req: true }) + inp('start_time', 'Giờ xuất phát', 'time') +
-      inp('location', 'Địa điểm', 'text') + inp('distance_km', 'Cự ly (km)', 'number', { step: '0.1' }) + inp('ascent_m', 'D+ (m)', 'number', { step: '10' }) + inp('cutoff_h', 'Cutoff (giờ)', 'number', { step: '0.5' }) +
+      inp('location', 'Địa điểm', 'text') + inp('distance_km', 'Cự ly (km)', 'number', { step: '0.1' }) + inp('ascent_m', 'D+ (m)', 'number', { step: '1' }) + inp('descent_m', 'D− (m)', 'number', { step: '1' }) + inp('cutoff_h', 'Cutoff (giờ)', 'number', { step: '0.25' }) +
       sel('priority', 'Ưu tiên', [['A', PRIO.A], ['B', PRIO.B], ['C', PRIO.C]]) +
       sel('status', 'Trạng thái', Object.keys(RSTATUS).map(function (k) { return [k, RSTATUS[k]]; })) +
       inp('register_by', 'Hạn đăng ký', 'date') + inp('change_by', 'Hạn đổi cự ly', 'date') +
       sel('plan_id', 'Giáo án', [['', '(không có)']].concat(PLANS.map(function (p) { return [p.id, p.name]; }))) +
       inp('url', 'Link trang giải', 'url', { wide: true }) +
-      '<label class="wide">Ghi chú<textarea name="notes" rows="3">' + esc(r.notes || '') + '</textarea></label>' +
+      '<label class="wide">Checkpoint (mỗi dòng: tên | km | cutoff | ghi chú)<textarea name="checkpoints" rows="4" placeholder="CP2 | 21.5 | 11:30 | có nước, chuối">' + esc(cps) + '</textarea></label>' +
+      '<label class="wide">Thông tin giải (địa hình, trạm, trang bị…)<textarea name="notes" rows="5">' + esc(r.notes || '') + '</textarea></label>' +
+      '<label class="wide">Phân tích (Claude viết, sửa được)<textarea name="analysis" rows="6">' + esc(r.analysis || '') + '</textarea></label>' +
       '<label>Thời gian chính thức (h:mm)<input name="result_time" type="text" inputmode="numeric" placeholder="để trống: lấy từ đồng hồ" value="' + rt + '"></label>' +
       '<label class="wide">Ghi chú kết quả<textarea name="result_note" rows="2">' + esc(r.result_note || '') + '</textarea></label>' +
       '</form><div class="btnrow"><button class="primary" data-act="rsave">Lưu</button>' + (r.id ? '<button class="danger" data-act="rdel" data-race="' + r.id + '">Xoá giải</button>' : '') +
@@ -136,14 +173,29 @@
   function saveRace() {
     var f = $('#rform'); if (!f.reportValidity()) return;
     var id = f.dataset.id, body = {};
-    ['name', 'race_date', 'start_time', 'location', 'priority', 'status', 'register_by', 'change_by', 'plan_id', 'url', 'notes', 'result_note'].forEach(function (k) { var v = f.elements[k].value.trim(); if (v || id) body[k] = v || null; });
-    ['distance_km', 'ascent_m', 'cutoff_h'].forEach(function (k) { var v = f.elements[k].value; if (v || id) body[k] = v ? +v : null; });
+    ['name', 'race_date', 'start_time', 'location', 'priority', 'status', 'register_by', 'change_by', 'plan_id', 'url', 'notes', 'analysis', 'result_note'].forEach(function (k) { var v = f.elements[k].value.trim(); if (v || id) body[k] = v || null; });
+    ['distance_km', 'ascent_m', 'descent_m', 'cutoff_h'].forEach(function (k) { var v = f.elements[k].value; if (v || id) body[k] = v ? +v : null; });
+    body.checkpoints = f.elements.checkpoints.value.split('\n').map(function (l) { return l.split('|').map(function (x) { return x.trim(); }); }).filter(function (c) { return c[0]; })
+      .map(function (c) { var km = parseFloat((c[1] || '').replace(',', '.')); return { name: c[0], km: isNaN(km) ? null : km, cutoff: c[2] || null, note: c[3] || null }; });
     var rt = f.elements.result_time.value.trim();
     if (rt) { var m = rt.match(/^(\d+):(\d{1,2})$/); if (!m) { $('#rmsg').textContent = 'Thời gian dạng h:mm, vd. 12:45'; return; } body.result_time_s = +m[1] * 3600 + +m[2] * 60; } else if (id) body.result_time_s = null;
-    api(id ? '/api/nb/races/' + id : '/api/nb/races', { method: id ? 'PUT' : 'POST', body: body }).then(reloadRaces).then(function () { location.hash = 'races'; })
+    api(id ? '/api/nb/races/' + id : '/api/nb/races', { method: id ? 'PUT' : 'POST', body: body }).then(reloadRaces).then(function () { location.hash = id ? 'rv/' + id : 'races'; })
       .catch(function (e) { if (e.message !== 'auth') $('#rmsg').textContent = e.message; });
   }
-  function reloadRaces() { return api('/api/nb/races').then(function (r) { RACES = r; if (ui.view === 'races') render(); }); }
+  function upNext() {
+    var up = RACES.filter(function (r) { return r.days_to >= 0 && r.status !== 'dns'; }).slice(0, 3);
+    if (!up.length) return '';
+    return '<div class="upnext">' + up.map(function (r) {
+      return '<a href="#rv/' + r.id + '"><span class="un">' + (r.priority === 'A' ? '★ ' : '') + esc(r.name) + '</span>' + lvlBadge(r.difficulty) + '<span class="ud">' + countTxt(r) + '</span></a>';
+    }).join('') + '</div>';
+  }
+  function headerCount() {
+    var up = RACES.filter(function (r) { return r.days_to >= 0 && r.status !== 'dns'; });
+    var a = up.filter(function (r) { return r.priority === 'A'; })[0] || up[0];
+    if (a) { $('#count').textContent = (a.days_to === 0 ? 'Hôm nay: ' : 'Còn ' + a.days_to + ' ngày · ') + a.name.split(' – ').pop(); return; }
+    countdown();
+  }
+  function reloadRaces() { return api('/api/nb/races').then(function (r) { RACES = r; headerCount(); if (ui.view === 'races') render(); }); }
 
   function render() {
     document.querySelectorAll('.tab').forEach(function (t) { t.setAttribute('aria-selected', t.dataset.view === ui.view ? 'true' : 'false'); });
@@ -167,6 +219,7 @@
       '<div class="small">' + done + '/' + items.length + ' mục đã xong</div></div>' +
       '<button class="nav" data-act="next" aria-label="Ngày sau">›</button></section>';
     if (!isToday) h += '<button class="link-btn" data-act="today">Về hôm nay</button>';
+    else h += upNext();
     racesOn(ui.date).forEach(function (r) { h += '<div class="raceday"><b>Ngày đua: ' + esc(r.name) + '</b><div class="small">' + esc(raceMeta(r)) + '</div></div>'; });
     h += coachHtml(J.coach.days[ui.date], 'Nhận xét của Claude');
     ['S', 'T', 'C', 'N'].forEach(function (slot) {
@@ -339,19 +392,21 @@
     var h = (location.hash || '').slice(1), parts = h.split('/');
     if (parts[0] === 'ex' && EXM[parts[1]]) return sheet(exHtml(EXM[parts[1]]));
     if (parts[0] === 'blk' && BLOCKS[parts[1]]) return sheet(blkHtml(parts[1]));
+    if (parts[0] === 'rv') { var rv = RACES.filter(function (x) { return String(x.id) === parts[1]; })[0]; if (rv) return sheet(raceView(rv)); }
     if (parts[0] === 'race') { var rr = RACES.filter(function (x) { return String(x.id) === parts[1]; })[0]; if (rr || parts[1] === 'new') return sheet(raceForm(rr)); }
     closeSheet();
     if (['week', 'lib', 'today', 'cap', 'races'].indexOf(parts[0]) >= 0) { ui.view = parts[0]; render(); }
   }
-  function back() { if (history.length > 1 && /^#(ex|blk|race)\//.test(location.hash)) history.back(); else { location.hash = ui.view; } }
+  function back() { if (history.length > 1 && /^#(ex|blk|race|rv)\//.test(location.hash)) history.back(); else { location.hash = ui.view; } }
 
   /* ---------- sự kiện ---------- */
   document.addEventListener('click', function (ev) {
     if (!PLAN) return;
-    var t = ev.target.closest('[data-act],[data-view],[data-go],[data-cat],#closebtn,#sheet');
+    var t = ev.target.closest('[data-act],[data-view],[data-go],[data-cat],[data-rv],#closebtn,#sheet');
     if (!t) return;
     if (t.id === 'closebtn' || (t.id === 'sheet' && ev.target === t)) { back(); return; }
     if (t.dataset.view) { ui.view = t.dataset.view; if (ui.view === 'week' || ui.view === 'cap') ui.week = weekOf(ui.date); location.hash = ui.view; render(); return; }
+    if (t.dataset.rv && !ev.target.closest('a')) { location.hash = 'rv/' + t.dataset.rv; return; }
     if (t.dataset.go) { ui.date = t.dataset.go; ui.view = 'today'; location.hash = 'today'; render(); return; }
     if (t.dataset.cat) { ui.cat = t.dataset.cat; document.querySelectorAll('.chip').forEach(function (c) { c.setAttribute('aria-pressed', c.dataset.cat === ui.cat); }); fillLib(); return; }
     var a = t.dataset.act;
@@ -396,7 +451,10 @@
       noteTimer = setTimeout(function () { if (v) J.notes[d] = v; else delete J.notes[d]; write('/api/nb/notes/' + d, { note: v }).catch(function () { }); }, 600);
     }
   });
-  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && !$('#sheet').hidden) back(); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && !$('#sheet').hidden) back();
+    if (ev.key === 'Enter' && ev.target.dataset && ev.target.dataset.rv) location.hash = 'rv/' + ev.target.dataset.rv;
+  });
   function updateMeter() {
     var boxes = document.querySelectorAll('#main input[type=checkbox]'), n = 0; boxes.forEach(function (b) { if (b.checked) n++; });
     var m = $('#main .meter span'); if (m) m.style.width = (boxes.length ? n / boxes.length * 100 : 0) + '%';
@@ -441,10 +499,10 @@
       return api('/api/nb/journal?start=' + PLAN.weeks[0].start + '&end=' + PLAN.weeks[PLAN.weeks.length - 1].end);
     }).then(function (j) {
       J = j; ui.date = clampDate(today()); ui.week = null;
-      $('#planname').textContent = PLAN.name; $('#race').textContent = PLAN.race || ''; countdown();
+      $('#planname').textContent = PLAN.name; $('#race').textContent = PLAN.race || ''; headerCount();
       document.title = 'Sổ tập · ' + PLAN.name;
       status('ok'); render();
-      if (/^#(ex|blk|race)\//.test(location.hash)) route();
+      if (/^#(ex|blk|race|rv)\//.test(location.hash)) route();
     });
   }
   function boot() {
