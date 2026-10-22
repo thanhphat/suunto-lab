@@ -222,6 +222,11 @@ def nb_test(day: date, test_id: str, body: TestIn, athlete: int = Depends(auth))
     return {"ok": True}
 
 
+@app.get("/api/nb/volume")
+def nb_volume(start: date, end: date, athlete: int = Depends(auth)):
+    return notebook.week_volume(athlete, start, end)
+
+
 @app.get("/api/nb/races")
 def nb_races(athlete: int = Depends(auth)):
     return notebook.list_races(athlete)

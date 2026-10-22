@@ -84,6 +84,7 @@ Các tool có sẵn:
 | `record_test_result` ✎ | Ghi kết quả tự kiểm tra |
 | `save_plan`, `update_plan_days` ✎ | Tạo giáo án cho giải mới, chỉnh lịch các ngày tới |
 | `save_library_item` ✎ | Thêm hoặc sửa bài tập, mẫu buổi, bài test |
+| `get_volume`, `update_plan_week` ✎ | Khối lượng tập theo khoảng ngày; đặt mục tiêu giờ / km cho từng tuần |
 | `list_races`, `save_race` ✎ | Lịch giải cả mùa: ngày, cự ly, D+, cutoff, ưu tiên A/B/C, trạng thái, kết quả |
 
 ✎ là tool có quyền ghi, chỉ ghi vào các bảng của sổ tập, không đụng tới dữ liệu đồng hồ.
@@ -125,7 +126,7 @@ Kiểm tra nhanh từ terminal: `MCP_TOKEN=... scripts/mcp_call.sh get_overview`
 Mở `/notebook` (hoặc nút *Sổ tập* trên dashboard), đăng nhập bằng cùng `API_TOKEN`.
 
 - **Hôm nay**: việc theo buổi sáng/trưa/chiều/mỗi ngày, bấm vào tên để mở hướng dẫn bài, ghi chú ngày, các buổi đồng hồ ghi nhận trong ngày.
-- **Tuần**: checklist mục tiêu tuần, phần trăm hoàn thành từng ngày.
+- **Tuần**: checklist mục tiêu tuần, phần trăm hoàn thành từng ngày, và **khối lượng tuần** so với mục tiêu: giờ tập (mọi buổi đồng hồ ghi nhận, kể cả đạp xe, bơi, cộng các buổi bổ trợ đã tick) và km trên chân.
 - **Năng lực**: bộ tự kiểm tra hằng tuần, so với mục tiêu và tuần trước.
 - **Giải**: lịch giải cả mùa, kể cả giải đăng ký trước chưa có giáo án. Mỗi giải có **độ khó tính riêng cho bạn** (1–5): thời gian về đích dự kiến từ các buổi dài gần đây (kiểu Riegel, mũ 1,10) so với cutoff, giới hạn theo độ dài cung đường, cộng thêm khi giải trước đó quá gần. Bấm vào giải để xem trang chi tiết: số liệu, checkpoint, thông tin giải và phần phân tích của Claude. Giải sắp tới cũng hiện ở đầu dashboard và tab Hôm nay. Ưu tiên A (giải chính, có giáo án riêng), B (giải tập nằm trong giáo án A), C (chạy vui). Hiện eKm/h cần để kịp cutoff (eKm = km + D+/100), nhắc hạn đăng ký và hạn đổi cự ly, và sau ngày đua tự ghép buổi chạy đồng hồ ghi nhận để ra kết quả.
 - **Thư viện**: bài tập và mẫu buổi tập dùng chung cho mọi giáo án.

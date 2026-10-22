@@ -273,6 +273,7 @@
       '<div class="meter"><span style="width:' + (total ? got / total * 100 : 0) + '%"></span></div><div class="small">' + got + '/' + total + ' mục tiêu đạt</div></div>' +
       '<button class="nav" data-act="wnext" aria-label="Tuần sau"' + (next ? '' : ' disabled') + '>›</button></section>' +
       '<p class="focus">' + esc(w.focus) + '</p>' + coachHtml(J.coach.weeks[w.start], 'Nhận xét tuần của Claude');
+    h += '<section class="slot" id="vol"><h3>Khối lượng tuần</h3><p class="small">Đang tính…</p></section>';
     var wr = RACES.filter(function (r) { return r.race_date >= w.start && r.race_date <= w.end; });
     if (wr.length) h += '<section class="slot"><h3>Giải trong tuần</h3><div class="acts">' + wr.map(raceCard).join('') + '</div></section>';
     ['test', 'volume', 'habit'].forEach(function (c) {
@@ -289,6 +290,23 @@
     }).join('') + '</div></section>';
     if (next) h += '<section class="slot nextwk"><h3>Tuần sau: ' + esc(next.name) + '</h3><ul class="plain">' + next.goals.map(function (g) { return '<li><span class="tag ' + g.cat + '">' + GCAT[g.cat] + '</span>' + esc(g.text) + '</li>'; }).join('') + '</ul></section>';
     main.innerHTML = h;
+    loadVolume(w);
+  }
+
+  var SPORT_VI = { running: 'Chạy', hiking: 'Leo núi', walking: 'Đi bộ', cycling: 'Đạp xe', swimming: 'Bơi', training: 'Tập luyện' };
+  function volBar(label, got, target, unit) {
+    var pct = target ? Math.min(100, got / target * 100) : 0;
+    return '<div class="capcard' + (target && got >= target ? ' pass' : '') + '"><div class="caprow"><b>' + label + '</b><span class="big" style="font:600 20px var(--display)">' + nf(got) + (target ? ' / ' + nf(target) : '') + ' ' + unit + '</span></div>' +
+      (target ? '<div class="meter" style="max-width:none"><span style="width:' + pct + '%"></span></div>' : '<div class="small">Chưa đặt mục tiêu cho tuần này</div>') + '</div>';
+  }
+  function loadVolume(w) {
+    api('/api/nb/volume?start=' + w.start + '&end=' + w.end).then(function (v) {
+      var el = $('#vol'); if (!el || (ui.week || weekOf(ui.date)) !== w) return;
+      var parts = Object.keys(v.by_sport).map(function (k) { var x = v.by_sport[k]; return (SPORT_VI[k] || k) + ' ' + hms(x.hours * 3600) + (x.km ? ' · ' + nf(x.km) + ' km' : ''); });
+      if (v.strength_blocks) parts.push('Bổ trợ ' + hms(v.strength_hours * 3600) + ' (' + v.strength_blocks + ' buổi đã tick)');
+      el.innerHTML = '<h3>Khối lượng tuần</h3><div class="capcards">' + volBar('Giờ tập', v.hours, w.target_h, 'giờ') + volBar('Km trên chân', v.foot_km, w.target_km, 'km') + '</div>' +
+        '<p class="small">' + (parts.length ? esc(parts.join(' · ')) : 'Chưa có buổi nào. Tải file FIT của mọi buổi (cả đạp xe, bơi) để được tính.') + '</p>';
+    }).catch(function () { });
   }
 
   /* ---------- Năng lực: tự kiểm tra hằng tuần ---------- */

@@ -249,6 +249,10 @@ CREATE TABLE IF NOT EXISTS plan_weeks (
   focus       text,
   PRIMARY KEY (plan_id, n)
 );
+-- Weekly volume targets: hours of training (watch activities of any sport + ticked strength blocks)
+-- and km on foot (run, trail, hike, walk).
+ALTER TABLE plan_weeks ADD COLUMN IF NOT EXISTS target_h real CHECK (target_h >= 0);
+ALTER TABLE plan_weeks ADD COLUMN IF NOT EXISTS target_km real CHECK (target_km >= 0);
 CREATE TABLE IF NOT EXISTS plan_goals (
   id       bigserial PRIMARY KEY,
   plan_id  text NOT NULL,

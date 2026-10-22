@@ -5,7 +5,7 @@ Shared by the HTTP API (web notebook) and the MCP server (agent reads and writes
 Plan format, used by save_plan and `python -m app.notebook load-plan`:
   {"id": "race-2027", "name": "...", "race": "...", "start": "2027-01-04", "end": "2027-03-14",
    "test_note": "...", "test_targets": {"calf": [10, 12, ...]},            # one target per plan week
-   "weeks": [{"n": 1, "start": "...", "end": "...", "name": "...", "focus": "...",
+   "weeks": [{"n": 1, "start": "...", "end": "...", "name": "...", "focus": "...", "target_h": 9, "target_km": 30,
               "goals": [["test" | "volume" | "habit", "text"], ...]}],
    "days": {"2027-01-04": [["S" | "T" | "C" | "N", "label", "#BLOCK" | "@exercise" | ""], ...]}}
 An item's label may be empty when ref points at a block or exercise; the UI then shows its name.
@@ -152,7 +152,8 @@ def get_plan(athlete_id: int, plan_id: str, start: date | None = None, end: date
         p = c.execute("SELECT * FROM plans WHERE id=%s AND athlete_id=%s", (plan_id, athlete_id)).fetchone()
         if not p:
             return None
-        weeks = c.execute("SELECT n, start_date, end_date, name, focus FROM plan_weeks WHERE plan_id=%s ORDER BY n",
+        weeks = c.execute("SELECT n, start_date, end_date, name, focus, target_h, target_km FROM plan_weeks "
+                          "WHERE plan_id=%s ORDER BY n",
                           (plan_id,)).fetchall()
         goals = c.execute("SELECT id, week_n, cat, text, done_at IS NOT NULL AS done FROM plan_goals "
                           "WHERE plan_id=%s ORDER BY week_n, idx", (plan_id,)).fetchall()
@@ -169,7 +170,8 @@ def get_plan(athlete_id: int, plan_id: str, start: date | None = None, end: date
         "id": p["id"], "name": p["name"], "race": p["race"], "start": p["start_date"], "end": p["end_date"],
         "test_note": p["test_note"], "test_targets": p["test_targets"],
         "weeks": [{"n": w["n"], "start": w["start_date"], "end": w["end_date"], "name": w["name"],
-                   "focus": w["focus"], "goals": by_week.get(w["n"], [])} for w in weeks],
+                   "focus": w["focus"], "target_h": w["target_h"], "target_km": w["target_km"],
+                   "goals": by_week.get(w["n"], [])} for w in weeks],
         "days": days,
     })
 
@@ -248,8 +250,10 @@ def save_plan(athlete_id: int, plan: dict) -> dict:
         c.execute("DELETE FROM plan_weeks WHERE plan_id=%s", (pid,))
         for w in weeks:
             n = int(w["n"])
-            c.execute("INSERT INTO plan_weeks (plan_id, n, start_date, end_date, name, focus) VALUES (%s,%s,%s,%s,%s,%s)",
-                      (pid, n, _day(w["start"]), _day(w["end"]), w.get("name") or f"Tuần {n}", w.get("focus")))
+            c.execute("""INSERT INTO plan_weeks (plan_id, n, start_date, end_date, name, focus, target_h, target_km)
+                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                      (pid, n, _day(w["start"]), _day(w["end"]), w.get("name") or f"Tuần {n}", w.get("focus"),
+                       w.get("target_h"), w.get("target_km")))
             for idx, g in enumerate(w.get("goals") or []):
                 cat, text = (g["cat"], g["text"]) if isinstance(g, dict) else g
                 if cat not in GOAL_CATS:
@@ -274,6 +278,44 @@ def update_plan_days(athlete_id: int, plan_id: str, days: dict) -> dict:
         n = _write_days(c, plan_id, days)
         c.execute("UPDATE plans SET updated_at=now() WHERE id=%s", (plan_id,))
     return {"id": plan_id, "days": sorted(days), "items": n}
+
+
+def update_plan_week(athlete_id: int, plan_id: str, n: int, fields: dict) -> dict:
+    """Change a week's name, focus or volume targets (target_h, target_km) without rewriting the plan."""
+    allowed = {k: fields[k] for k in ("name", "focus", "target_h", "target_km") if k in fields}
+    if not allowed:
+        raise NotebookError("Chỉ sửa được name, focus, target_h, target_km")
+    with db.conn() as c:
+        sets = ", ".join(f"{k}=%s" for k in allowed)
+        r = c.execute(f"""UPDATE plan_weeks w SET {sets} FROM plans p
+                          WHERE w.plan_id=%s AND w.n=%s AND p.id=w.plan_id AND p.athlete_id=%s RETURNING w.n""",
+                      (*allowed.values(), plan_id, n, athlete_id)).fetchone()
+    if not r:
+        raise NotebookError(f"Không có tuần {n} trong giáo án {plan_id!r}")
+    return {"plan_id": plan_id, "n": n, **allowed}
+
+
+def week_volume(athlete_id: int, start: date, end: date) -> dict:
+    """Training volume in a date range: watch hours by sport, km on foot, and minutes of ticked
+    strength/mobility blocks (block `min`). Hours = watch moving time + ticked block minutes."""
+    with db.conn() as c:
+        acts = c.execute("""SELECT sport, count(*) AS n, sum(moving_s) AS s, sum(distance_m) AS m, sum(ascent_m) AS up
+                            FROM activities WHERE athlete_id=%s AND local_date BETWEEN %s AND %s GROUP BY sport""",
+                         (athlete_id, start, end)).fetchall()
+        blk = c.execute("""SELECT coalesce(sum((b.data->>'min')::int), 0) AS mins, count(*) AS n
+                           FROM plan_items i JOIN plans p ON p.id = i.plan_id
+                           JOIN nb_blocks b ON i.ref = '#' || b.id
+                           WHERE p.athlete_id=%s AND i.day BETWEEN %s AND %s AND i.done_at IS NOT NULL""",
+                        (athlete_id, start, end)).fetchone()
+    foot = ("running", "hiking", "walking", "trail_running")
+    by_sport = {a["sport"]: {"sessions": a["n"], "hours": round(a["s"] / 3600, 2), "km": round(a["m"] / 1000, 1),
+                             "ascent_m": round(a["up"] or 0)} for a in acts}
+    watch_h = sum(v["hours"] for v in by_sport.values())
+    return {"start": start.isoformat(), "end": end.isoformat(), "watch_hours": round(watch_h, 2),
+            "strength_hours": round(blk["mins"] / 60, 2), "strength_blocks": blk["n"],
+            "hours": round(watch_h + blk["mins"] / 60, 2),
+            "foot_km": round(sum(v["km"] for k, v in by_sport.items() if k in foot), 1),
+            "ascent_m": sum(v["ascent_m"] for v in by_sport.values()), "by_sport": by_sport}
 
 
 def set_item_done(athlete_id: int, item_id: int, done: bool) -> bool:

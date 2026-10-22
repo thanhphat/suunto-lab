@@ -244,6 +244,20 @@ def update_plan_days(days: dict, plan_id: str | None = None) -> dict:
 
 
 @mcp.tool(annotations=RO)
+def get_volume(start_date: str, end_date: str) -> dict:
+    """Training volume in a date range: watch hours and km by sport, km on foot, ascent, and hours of
+    ticked strength/mobility blocks. Compare with the plan week's target_h / target_km from get_plan."""
+    return notebook.week_volume(athlete(), _d(start_date), _d(end_date))
+
+
+@mcp.tool(annotations=RW)
+def update_plan_week(n: int, fields: dict, plan_id: str | None = None) -> dict:
+    """Change one plan week's name, focus, or volume targets: target_h (hours: watch activities of any
+    sport + strength blocks) and target_km (km on foot)."""
+    return _nb(notebook.update_plan_week, athlete(), _plan_id(plan_id), n, fields)
+
+
+@mcp.tool(annotations=RO)
 def list_races(start_date: str | None = None, end_date: str | None = None) -> list[dict]:
     """Race calendar (all by default): date, distance, ascent/descent, cutoff, checkpoints, priority (A goal
     race, B training race, C fun), status (planned, registered, done, dnf, dns), deadlines, linked plan,
