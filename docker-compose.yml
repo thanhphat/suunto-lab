@@ -1,0 +1,64 @@
+name: suunto-lab
+
+x-app: &app
+  build: .
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://suunto:${POSTGRES_PASSWORD}@db:5432/suunto
+    FIT_STORAGE_DIR: /data/fit
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: timescale/timescaledb:2.17.2-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: suunto
+      POSTGRES_DB: suunto
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"        # local only, for psql / backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U suunto -d suunto"]
+      interval: 5s
+      retries: 20
+
+  api:
+    <<: *app
+    volumes:
+      - fitfiles:/data/fit
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.worker"]
+    volumes:
+      - fitfiles:/data/fit
+
+  mcp:
+    <<: *app
+    command: ["python", "-m", "app.mcp_server", "--http", "8001"]
+    ports:
+      - "127.0.0.1:8001:8001"
+
+  # Public HTTPS without opening router ports. Enable with: docker compose --profile tunnel up -d
+  # In Cloudflare Zero Trust, point e.g. run.example.com -> http://api:8000 and mcp.example.com -> http://mcp:8001
+  tunnel:
+    image: cloudflare/cloudflared:2024.12.2
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on: [api, mcp]
+
+volumes:
+  pgdata:
+  fitfiles:

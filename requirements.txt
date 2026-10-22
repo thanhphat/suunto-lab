@@ -1,0 +1,7 @@
+fastapi==0.115.14
+uvicorn[standard]==0.34.3
+python-multipart==0.0.20
+psycopg[binary,pool]==3.3.6
+numpy==2.5.3
+garmin-fit-sdk==21.218.0
+mcp==2.3.0

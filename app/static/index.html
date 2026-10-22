@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Suunto Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Saira+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: one column of instrument panels, data-first; condensed numerals like a watch face, quiet forest-and-stone ground. */
+:root {
+  --bg: #eef1ec; --surface: #f9faf7; --ink: #17201b; --muted: #5d6a62; --line: #d4dad1; --soft: #e4e9e2;
+  --accent: #1f6b57; --accent-ink: #f4faf7; --alt: #9a7a4a; --alt-fill: rgba(154,122,74,.16);
+  --hr: #c0392b; --pace: #2c5e98; --gap: #7a5bb0; --good: #2f7d4f; --warn: #b7791f; --bad: #b83a2e;
+  --z1: #8fa6b6; --z2: #5c9c79; --z3: #d1a53a; --z4: #d9772e; --z5: #c0392b;
+  --display: "Saira Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111613; --surface: #18201c; --ink: #e3e9e4; --muted: #94a19a; --line: #2b3530; --soft: #212a25;
+    --accent: #5cc0a0; --accent-ink: #0e1a15; --alt: #c9a46c; --alt-fill: rgba(201,164,108,.16);
+    --hr: #f06a5b; --pace: #7aa9e2; --gap: #b49be0; --good: #5cc08a; --warn: #e0a84a; --bad: #f06a5b;
+    --z1: #7f97a8; --z2: #5fb08a; --z3: #ddb54d; --z4: #ea8c45; --z5: #f06a5b;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--body); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left)); }
+header.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 12px; padding-block: 10px; padding-bottom: 10px; }
+.brand { font: 700 22px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.brand svg { color: var(--accent); }
+.spacer { flex: 1; }
+button, .btn { white-space: nowrap; font: 500 13px var(--body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 7px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.danger { color: var(--bad); }
+button.ghost { background: transparent; border-color: transparent; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h2 { font-size: 20px; text-transform: uppercase; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.num { font-family: var(--display); font-weight: 600; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+section { margin-top: 22px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.grid { display: grid; gap: 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.stat { background: var(--surface); padding: 12px 14px; min-width: 0; box-shadow: inset -1px -1px 0 var(--line); }
+.stat .v { font: 600 28px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.stat .v small { font-size: 15px; color: var(--muted); font-weight: 500; margin-left: 2px; }
+.stat .d { font-size: 12px; color: var(--muted); }
+.up { color: var(--good); } .down { color: var(--bad); }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 3px 9px; border-radius: 99px; border: 1px solid currentColor; }
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 5px 11px; background: transparent; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.chart { width: 100%; display: block; overflow: visible; }
+.chart text { fill: var(--muted); font: 11px var(--body); font-variant-numeric: tabular-nums; }
+.chart .grid line { stroke: var(--line); stroke-width: 1; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--surface); }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr.click { cursor: pointer; }
+tbody tr.click:hover { background: var(--soft); }
+.name { font-weight: 500; }
+.sub { font-size: 12px; color: var(--muted); }
+.zonebar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--soft); min-width: 60px; }
+.zonebar span { display: block; height: 100%; }
+.drop { position: fixed; inset: 0; z-index: 50; background: color-mix(in srgb, var(--accent) 18%, transparent); border: 3px dashed var(--accent); display: grid; place-items: center; font: 600 28px var(--display); color: var(--accent); text-transform: uppercase; }
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 40; max-width: min(420px, calc(100vw - 32px)); background: var(--ink); color: var(--bg); border-radius: 10px; padding: 12px 14px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+.toast ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.detail-top { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 12px; }
+.route { aspect-ratio: 1; width: 100%; max-width: 100%; }
+.route path.trk { fill: none; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.readout { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; min-height: 22px; font-variant-numeric: tabular-nums; }
+.readout b { font-weight: 600; }
+.empty { text-align: center; padding: 40px 16px; }
+.empty h2 { margin-bottom: 8px; }
+.form { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.form label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+input { font: 15px var(--body); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); width: 100%; }
+.err { color: var(--bad); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+@media (max-width: 760px) {
+  .two, .detail-top { grid-template-columns: minmax(0, 1fr); }
+  .route { max-width: 360px; margin: 0 auto; }
+  .stat .v { font-size: 24px; }
+  .hide-sm { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) { .panel, .stats, .tablewrap { animation: rise .25s ease-out; } }
+@keyframes rise { from { transform: translateY(4px); } to { transform: none; } }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="brand" id="home" role="link" tabindex="0">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" stroke-linejoin="round"/></svg>
+    Suunto Lab
+  </div>
+  <div class="spacer"></div>
+  <button id="btn-settings" class="ghost" title="Cài đặt nhịp tim">Cài đặt</button>
+  <label class="btn primary" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent)">
+    Nhập file FIT<input id="file" type="file" accept=".fit,.FIT,application/octet-stream" multiple hidden>
+  </label>
+</div></header>
+<main class="wrap" id="app"></main>
+<div class="drop" id="drop" hidden>Thả file FIT để nhập</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+// ---------- helpers ----------
+const $ = (s, el = document) => el.querySelector(s);
+const app = $("#app");
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = {
+  km: (m) => m == null ? "–" : (m / 1000).toFixed(m >= 100000 ? 0 : 1),
+  int: (v) => v == null ? "–" : Math.round(v).toLocaleString("vi-VN"),
+  dur(s) { if (s == null) return "–"; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; },
+  hm(s) { if (s == null) return "–"; const t = Math.round(s / 60), h = Math.floor(t / 60), m = t % 60; return h ? `${h}h${String(m).padStart(2, "0")}` : `${m}′`; },
+  pace(s) { if (!s || !isFinite(s) || s > 3600) return "–"; s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; },
+  date(d) { return new Date(d + (d.length === 10 ? "T00:00:00" : "")).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" }); },
+  time(iso) { return new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }); },
+};
+const ZONES = ["var(--z1)", "var(--z2)", "var(--z3)", "var(--z4)", "var(--z5)"];
+const ZNAME = ["Z1 Hồi phục", "Z2 Nền", "Z3 Tempo", "Z4 Ngưỡng", "Z5 Tối đa"];
+
+let TOKEN = (() => { try { return localStorage.getItem("suunto-lab-token") || ""; } catch { return ""; } })();
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), ...(TOKEN ? { Authorization: "Bearer " + TOKEN } : {}) } });
+  if (res.status === 401) { showLogin(); throw new Error("auth"); }
+  if (!res.ok) { let m = res.statusText; try { m = (await res.json()).detail || m; } catch {} throw new Error(m); }
+  return res.json();
+}
+
+// ---------- svg chart primitives ----------
+function scale(d0, d1, r0, r1) { const k = d1 === d0 ? 0 : (r1 - r0) / (d1 - d0); const f = (v) => r0 + (v - d0) * k; f.inv = (p) => d0 + (p - r0) / (k || 1); return f; }
+function niceTicks(min, max, n = 4) {
+  if (!isFinite(min) || !isFinite(max)) return [];
+  if (min === max) { max = min + 1; }
+  const raw = (max - min) / n, mag = 10 ** Math.floor(Math.log10(raw)), step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw);
+  const out = []; for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(+v.toFixed(10)); return out;
+}
+function linePath(xs, ys, x, y) {
+  let d = "", pen = false;
+  for (let i = 0; i < xs.length; i++) { if (ys[i] == null || !isFinite(ys[i])) { pen = false; continue; } d += (pen ? "L" : "M") + x(xs[i]).toFixed(1) + "," + y(ys[i]).toFixed(1); pen = true; }
+  return d;
+}
+
+// Bar chart for weekly totals
+function barChart({ labels, values, fmtV, color = "var(--accent)", height = 180, highlightLast = true }) {
+  const W = 640, H = height, L = 40, R = 8, T = 14, B = 26;
+  const max = Math.max(1, ...values), ticks = niceTicks(0, max, 3);
+  const top = Math.max(max, ticks.at(-1) || max);
+  const y = scale(0, top, H - B, T), bw = (W - L - R) / values.length;
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img"><g class="grid">`;
+  for (const t of ticks) s += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${fmtV(t)}</text>`;
+  s += `</g>`;
+  values.forEach((v, i) => {
+    const x = L + i * bw + bw * 0.18, w = bw * 0.64, h = Math.max(0, y(0) - y(v));
+    const last = highlightLast && i === values.length - 1;
+    s += `<rect x="${x}" y="${y(v)}" width="${w}" height="${h}" rx="3" fill="${color}" opacity="${last ? 1 : 0.62}"><title>${labels[i]}: ${fmtV(v)}</title></rect>`;
+    if (v > 0 && (values.length <= 16 || last)) s += `<text x="${x + w / 2}" y="${y(v) - 4}" text-anchor="middle" style="fill:var(--ink)">${fmtV(v)}</text>`;
+    if (i % Math.ceil(values.length / 8) === 0 || last) s += `<text x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${labels[i]}</text>`;
+  });
+  return s + `</svg>`;
+}
+
+// Load chart: daily TRIMP bars + CTL / ATL lines
+function loadChart(rows) {
+  const W = 640, H = 200, L = 40, R = 8, T = 12, B = 24;
+  const n = rows.length; if (!n) return "";
+  const max = Math.max(1, ...rows.map((r) => Math.max(r.trimp, r.atl || 0, r.ctl || 0)));
+  const ticks = niceTicks(0, max, 3), top = Math.max(max, ticks.at(-1));
+  const x = scale(0, n - 1, L, W - R), y = scale(0, top, H - B, T), bw = Math.max(1, (W - L - R) / n * 0.7);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img"><g class="grid">`;
+  for (const t of ticks) s += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${t}</text>`;
+  s += `</g>`;
+  rows.forEach((r, i) => { if (r.trimp > 0) s += `<rect x="${x(i) - bw / 2}" y="${y(r.trimp)}" width="${bw}" height="${y(0) - y(r.trimp)}" fill="var(--muted)" opacity=".28"/>`; });
+  const xs = rows.map((_, i) => i);
+  s += `<path d="${linePath(xs, rows.map((r) => r.atl), x, y)}" fill="none" stroke="var(--hr)" stroke-width="1.6" opacity=".8"/>`;
+  s += `<path d="${linePath(xs, rows.map((r) => r.ctl), x, y)}" fill="none" stroke="var(--accent)" stroke-width="2.4"/>`;
+  const last = rows.at(-1);
+  s += `<circle cx="${x(n - 1)}" cy="${y(last.ctl)}" r="3.5" fill="var(--accent)"/>`;
+  for (let i = 0; i < n; i += Math.ceil(n / 6)) s += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle">${rows[i].day.slice(8, 10)}/${rows[i].day.slice(5, 7)}</text>`;
+  return s + `</svg>`;
+}
+
+// ---------- views ----------
+let state = { weekly: null, metric: "distance_km", overview: null, list: null, settings: null };
+const METRICS = { distance_km: ["Km", (v) => Math.round(v)], ascent_m: ["D+ (m)", (v) => Math.round(v).toLocaleString("vi-VN")], moving_h: ["Giờ", (v) => (+v).toFixed(1)], trimp: ["Tải", (v) => Math.round(v)] };
+
+function delta(a, b) {
+  if (!b) return "";
+  const p = Math.round((a - b) / b * 100);
+  return `<span class="${p >= 0 ? "up" : "down"}">${p >= 0 ? "▲" : "▼"} ${Math.abs(p)}%</span> so với 7 ngày trước`;
+}
+
+function acwrChip(load) {
+  if (!load || !load.ctl) return "";
+  const r = load.atl / load.ctl;
+  const [txt, col] = r < 0.8 ? ["Tải thấp", "var(--muted)"] : r <= 1.3 ? ["Tăng tải hợp lý", "var(--good)"] : r <= 1.5 ? ["Tải cao", "var(--warn)"] : ["Tăng tải quá nhanh", "var(--bad)"];
+  return `<span class="chip" style="color:${col}" title="Tỉ lệ tải cấp tính / mãn tính (ATL ÷ CTL)">${txt} · ${r.toFixed(2)}</span>`;
+}
+
+async function renderHome() {
+  app.innerHTML = `<section><div class="muted">Đang tải…</div></section>`;
+  const [ov, weekly, list, load, files] = await Promise.all([
+    api("/api/overview"), api("/api/weekly?weeks=12"), api("/api/activities?limit=60"),
+    api("/api/load?start=" + isoDaysAgo(90)), api("/api/files?limit=8"),
+  ]);
+  Object.assign(state, { overview: ov, weekly, list });
+  if (!list.length) {
+    app.innerHTML = `<section class="panel empty"><h2>Chưa có bài tập nào</h2>
+      <p class="muted">Trong Suunto app: mở một bài tập → nút ⋯ góc trên phải → Export → FIT.<br>Rồi bấm <b>Nhập file FIT</b> hoặc kéo thả file vào trang này.</p></section>${fileStrip(files)}`;
+    return;
+  }
+  const a = ov.last_7d, b = ov.prev_7d, l = ov.load;
+  app.innerHTML = `
+  <section>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><h2>7 ngày qua</h2>${acwrChip(l)}</div>
+    <div class="stats">
+      <div class="stat"><div class="label">Quãng đường</div><div class="v">${(+a.distance_km).toFixed(1)}<small>km</small></div><div class="d">${delta(a.distance_km, b.distance_km)}</div></div>
+      <div class="stat"><div class="label">Thời gian di chuyển</div><div class="v">${(+a.moving_h).toFixed(1)}<small>giờ</small></div><div class="d">${a.activities} buổi</div></div>
+      <div class="stat"><div class="label">Leo dốc</div><div class="v">${fmt.int(a.ascent_m)}<small>m D+</small></div><div class="d">${delta(a.ascent_m, b.ascent_m)}</div></div>
+      <div class="stat"><div class="label">Tải (TRIMP)</div><div class="v">${fmt.int(a.trimp)}</div><div class="d">${delta(a.trimp, b.trimp)}</div></div>
+      <div class="stat"><div class="label">Thể lực · CTL</div><div class="v">${l ? l.ctl.toFixed(0) : "–"}</div><div class="d">Mệt mỏi ATL ${l ? l.atl.toFixed(0) : "–"} · Form ${l ? (l.tsb > 0 ? "+" : "") + l.tsb.toFixed(0) : "–"}</div></div>
+    </div>
+  </section>
+  <section class="two">
+    <div class="panel">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 class="label">12 tuần gần nhất</h3>
+        <div class="seg" role="group" aria-label="Chỉ số">${Object.entries(METRICS).map(([k, [n]]) => `<button data-m="${k}" aria-pressed="${k === state.metric}">${n}</button>`).join("")}</div></div>
+      <div id="weekly"></div>
+    </div>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px"><h3 class="label">Thể lực & mệt mỏi · 90 ngày</h3>
+        <div class="legend"><span><i style="background:var(--accent)"></i>CTL thể lực</span><span><i style="background:var(--hr)"></i>ATL mệt mỏi</span><span><i style="background:var(--muted);opacity:.4;height:8px"></i>Tải ngày</span></div></div>
+      ${loadChart(load)}
+    </div>
+  </section>
+  <section>
+    <h2 style="margin-bottom:10px">Hoạt động</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Ngày</th><th class="l">Bài tập</th><th>Km</th><th>Thời gian</th><th class="hide-sm">Pace</th><th>GAP</th><th>D+</th><th class="hide-sm">HR TB</th><th class="hide-sm">VAM</th><th>Tải</th></tr></thead>
+      <tbody>${list.map((r) => `<tr class="click" data-id="${r.id}" tabindex="0">
+        <td>${fmt.date(r.local_date)}<div class="sub">${fmt.time(r.start_time)}</div></td>
+        <td class="l"><span class="name">${esc(r.name)}</span></td>
+        <td class="num">${(+r.distance_km).toFixed(1)}</td><td>${fmt.hm(r.moving_s)}</td>
+        <td class="hide-sm">${fmt.pace(r.avg_pace_s_km)}</td><td>${fmt.pace(r.gap_pace_s_km)}</td>
+        <td>${fmt.int(r.ascent_m)}</td><td class="hide-sm">${r.hr_avg ?? "–"}</td><td class="hide-sm">${fmt.int(r.vam_m_h)}</td><td>${fmt.int(r.trimp)}</td></tr>`).join("")}</tbody>
+    </table></div>
+  </section>
+  ${fileStrip(files)}`;
+  drawWeekly();
+  app.querySelectorAll(".seg button").forEach((b) => b.onclick = () => { state.metric = b.dataset.m; app.querySelectorAll(".seg button").forEach((x) => x.setAttribute("aria-pressed", x === b)); drawWeekly(); });
+  app.querySelectorAll("tr.click").forEach((tr) => { const go = () => nav("a" + tr.dataset.id); tr.onclick = go; tr.onkeydown = (e) => e.key === "Enter" && go(); });
+}
+
+function drawWeekly() {
+  const [, f] = METRICS[state.metric];
+  $("#weekly").innerHTML = barChart({
+    labels: state.weekly.map((w) => w.week_start.slice(8, 10) + "/" + w.week_start.slice(5, 7)),
+    values: state.weekly.map((w) => +w[state.metric] || 0), fmtV: f,
+    color: state.metric === "ascent_m" ? "var(--alt)" : state.metric === "trimp" ? "var(--hr)" : "var(--accent)",
+  });
+}
+
+function fileStrip(files) {
+  const bad = files.filter((f) => f.status === "failed" || f.status === "pending" || f.status === "processing");
+  if (!bad.length) return "";
+  return `<section class="panel"><h3 class="label" style="margin-bottom:6px">File đang chờ / lỗi</h3>${bad.map((f) =>
+    `<div class="row" style="justify-content:space-between"><span>${esc(f.original_name || "file #" + f.id)}</span><span class="${f.status === "failed" ? "err" : "muted"}">${f.status === "failed" ? "Lỗi: " + esc(f.error) : f.status === "pending" ? "Đang chờ" : "Đang xử lý"}</span></div>`).join("")}</section>`;
+}
+
+function isoDaysAgo(n) { const d = new Date(Date.now() - n * 864e5); return d.toISOString().slice(0, 10); }
+
+// ---------- activity detail ----------
+async function renderActivity(id) {
+  app.innerHTML = `<section><div class="muted">Đang tải…</div></section>`;
+  let a, s;
+  try { [a, s] = await Promise.all([api(`/api/activities/${id}`), api(`/api/activities/${id}/streams?points=900`)]); }
+  catch (e) { if (e.message !== "auth") app.innerHTML = `<section class="panel empty"><h2>Không mở được hoạt động</h2><p class="muted">${esc(e.message)}</p><button onclick="nav('')">Về trang chính</button></section>`; return; }
+  const zs = a.zone_s || [0, 0, 0, 0, 0], ztot = zs.reduce((x, y) => x + y, 0) || 1;
+  app.innerHTML = `
+  <section class="row" style="justify-content:space-between">
+    <div><button class="ghost" onclick="nav('')" style="padding-left:0">← Tất cả hoạt động</button>
+      <h1 style="font-size:32px;line-height:1.1">${esc(a.name)}</h1>
+      <div class="muted">${fmt.date(a.local_date)} · ${fmt.time(a.start_time)} · ${esc([a.device_manufacturer, a.device_product].filter(Boolean).join(" ") || "thiết bị không rõ")}${a.rr_count ? ` · ${a.rr_count.toLocaleString("vi-VN")} nhịp R-R` : ""}</div></div>
+    <div id="del"><button class="danger" id="btn-del">Xoá</button></div>
+  </section>
+  <section class="stats">
+    <div class="stat"><div class="label">Quãng đường</div><div class="v">${(+a.distance_km).toFixed(2)}<small>km</small></div></div>
+    <div class="stat"><div class="label">Di chuyển</div><div class="v">${fmt.dur(a.moving_s)}</div><div class="d">Tổng ${fmt.dur(a.elapsed_s)}</div></div>
+    <div class="stat"><div class="label">Pace TB</div><div class="v">${fmt.pace(a.avg_pace_s_km)}<small>/km</small></div></div>
+    <div class="stat"><div class="label">GAP</div><div class="v">${fmt.pace(a.gap_pace_s_km)}<small>/km</small></div><div class="d">pace quy đổi đường bằng</div></div>
+    <div class="stat"><div class="label">Leo / xuống</div><div class="v">${fmt.int(a.ascent_m)}<small>m</small></div><div class="d">D− ${fmt.int(a.descent_m)} m · ${fmt.int(a.alt_min_m)}–${fmt.int(a.alt_max_m)} m</div></div>
+    <div class="stat"><div class="label">VAM</div><div class="v">${fmt.int(a.vam_m_h)}<small>m/h</small></div><div class="d">${fmt.hm(a.climb_s)} trên dốc &gt;5%</div></div>
+    <div class="stat"><div class="label">Nhịp tim</div><div class="v">${a.hr_avg ?? "–"}<small>bpm</small></div><div class="d">Max ${a.hr_max ?? "–"}</div></div>
+    <div class="stat"><div class="label">Tải · Lệch nhịp</div><div class="v">${fmt.int(a.trimp)}</div><div class="d">Decoupling ${a.decoupling_pct == null ? "–" : a.decoupling_pct + "%"}</div></div>
+  </section>
+  <section class="detail-top">
+    <div class="panel">${a.has_gps ? routeSvg(s) : `<div class="muted empty">Không có GPS</div>`}</div>
+    <div class="panel">
+      <div class="readout" id="readout"><span class="muted">Rê chuột hoặc chạm vào biểu đồ để xem từng điểm.</span></div>
+      <div id="charts"></div>
+    </div>
+  </section>
+  <section class="two">
+    <div class="panel"><h3 class="label" style="margin-bottom:10px">Thời gian theo vùng nhịp tim</h3>
+      ${zs.map((z, i) => `<div class="row" style="flex-wrap:nowrap;margin:6px 0"><span style="width:96px;font-size:12px">${ZNAME[i]}</span>
+        <div class="zonebar" style="flex:1"><span style="width:${z / ztot * 100}%;background:${ZONES[i]}"></span></div>
+        <span class="num" style="width:64px;text-align:right">${fmt.hm(z)}</span><span class="muted" style="width:40px;text-align:right;font-size:12px">${Math.round(z / ztot * 100)}%</span></div>`).join("")}
+    </div>
+    <div class="panel"><h3 class="label" style="margin-bottom:6px">Cách đọc</h3>
+      <p class="muted" style="margin:0;font-size:13px"><b>GAP</b> quy mỗi mét chạy dốc về công sức tương đương trên đường bằng (mô hình Minetti), nên so sánh được buổi trail với buổi đường bằng. <b>VAM</b> là số mét leo được mỗi giờ khi đang lên dốc. <b>Decoupling</b> so hiệu suất (tốc độ GAP ÷ nhịp tim) nửa sau với nửa đầu; dưới 5% thường cho thấy nền hiếu khí tốt cho cự ly đó.</p></div>
+  </section>
+  <section><h2 style="margin-bottom:10px">Từng km</h2><div class="tablewrap"><table>
+    <thead><tr><th>Km</th><th>Pace</th><th>GAP</th><th>HR</th><th>D+</th><th>D−</th><th class="l" style="width:40%">GAP</th></tr></thead>
+    <tbody>${splitRows(a.splits)}</tbody></table></div></section>`;
+  drawStreams(s);
+  $("#btn-del").onclick = () => {
+    $("#del").innerHTML = `<span class="muted" style="margin-right:6px">Xoá hoạt động này?</span><button class="danger" id="yes">Xoá</button> <button id="no">Huỷ</button>`;
+    $("#no").onclick = () => renderActivity(id);
+    $("#yes").onclick = async () => { await api(`/api/activities/${id}`, { method: "DELETE" }); toast("Đã xoá hoạt động."); nav(""); };
+  };
+}
+
+function splitRows(splits) {
+  if (!splits.length) return `<tr><td colspan="7" class="muted l">Không có dữ liệu km.</td></tr>`;
+  const g = splits.map((s) => s.gap_s_km).filter(Boolean), lo = Math.min(...g), hi = Math.max(...g);
+  return splits.map((s) => {
+    const w = s.gap_s_km ? 30 + 70 * (hi === lo ? 1 : (hi - s.gap_s_km) / (hi - lo)) : 0;
+    return `<tr><td>${s.distance_m < 990 ? (s.km - 1 + s.distance_m / 1000).toFixed(2) : s.km}</td><td>${fmt.pace(s.pace_s_km)}</td><td>${fmt.pace(s.gap_s_km)}</td><td>${s.hr_avg ?? "–"}</td>
+      <td>${fmt.int(s.ascent_m)}</td><td>${fmt.int(s.descent_m)}</td><td class="l"><div style="height:8px;border-radius:4px;background:var(--gap);opacity:.75;width:${w}%"></div></td></tr>`;
+  }).join("");
+}
+
+// Route drawn as SVG in an equirectangular projection, coloured by grade.
+function routeSvg(s) {
+  const pts = s.lat.map((la, i) => [la, s.lon[i], s.grade?.[i]]).filter((p) => p[0] != null);
+  if (pts.length < 2) return `<div class="muted empty">Không có GPS</div>`;
+  const lat0 = pts.reduce((a, p) => a + p[0], 0) / pts.length, kx = Math.cos(lat0 * Math.PI / 180);
+  const xs = pts.map((p) => p[1] * kx), ys = pts.map((p) => -p[0]);
+  const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+  const span = Math.max(maxx - minx, maxy - miny) || 1e-6, S = 300, P = 14;
+  const X = (v) => P + (v - minx) / span * (S - 2 * P) + ((S - 2 * P) - (maxx - minx) / span * (S - 2 * P)) / 2;
+  const Y = (v) => P + (v - miny) / span * (S - 2 * P) + ((S - 2 * P) - (maxy - miny) / span * (S - 2 * P)) / 2;
+  const col = (g) => g == null ? "var(--muted)" : g > 0.12 ? "var(--z5)" : g > 0.06 ? "var(--z4)" : g > 0.02 ? "var(--z3)" : g < -0.06 ? "var(--pace)" : "var(--z2)";
+  let paths = "", cur = null, d = "";
+  for (let i = 0; i < pts.length; i++) {
+    const c = col(pts[i][2]), seg = `${X(xs[i]).toFixed(1)},${Y(ys[i]).toFixed(1)}`;
+    if (c !== cur) { if (d) paths += `<path class="trk" d="${d}" stroke="${cur}"/>`; d = (i ? `M${X(xs[i - 1]).toFixed(1)},${Y(ys[i - 1]).toFixed(1)}L` : "M") + seg; cur = c; }
+    else d += "L" + seg;
+  }
+  paths += `<path class="trk" d="${d}" stroke="${cur}"/>`;
+  const km = span * 111.32;
+  window.__route = { X, Y, kx, idx: s.lat.map((la, i) => la == null ? null : [s.lon[i] * kx, -la]) };
+  return `<svg class="route" viewBox="0 0 ${S} ${S}" role="img" aria-label="Bản đồ lộ trình">
+    ${paths}
+    <circle cx="${X(xs[0])}" cy="${Y(ys[0])}" r="5" fill="var(--surface)" stroke="var(--good)" stroke-width="3"/>
+    <circle cx="${X(xs.at(-1))}" cy="${Y(ys.at(-1))}" r="5" fill="var(--surface)" stroke="var(--bad)" stroke-width="3"/>
+    <circle id="route-dot" r="6" fill="var(--ink)" stroke="var(--surface)" stroke-width="2" style="display:none"/>
+    <text x="${P}" y="${S - 4}" style="fill:var(--muted);font:11px var(--body)">khung ≈ ${km.toFixed(1)} km</text>
+  </svg>
+  <div class="legend" style="margin-top:8px"><span><i style="background:var(--z2)"></i>bằng</span><span><i style="background:var(--z3)"></i>2–6%</span><span><i style="background:var(--z4)"></i>6–12%</span><span><i style="background:var(--z5)"></i>&gt;12%</span><span><i style="background:var(--pace)"></i>xuống &gt;6%</span></div>`;
+}
+
+// Stacked synced charts over distance: altitude, pace + GAP, heart rate.
+function drawStreams(s) {
+  const n = s.distance_m.length; if (!n) return;
+  const xs = s.distance_m.map((d) => d / 1000);
+  // pace from speed, smoothed a little and clipped for stops
+  const pace = s.speed_ms.map((v, i) => v && v > 0.6 && s.moving_frac[i] > 0.5 ? 1000 / v : null);
+  const gap = s.speed_ms.map((v, i) => v && v > 0.6 && s.moving_frac[i] > 0.5 ? 1000 / (v * minetti(s.grade[i] || 0) / minetti(0)) : null);
+  const sm = (a, w = 4) => a.map((_, i) => { let t = 0, c = 0; for (let k = i - w; k <= i + w; k++) if (a[k] != null) { t += a[k]; c++; } return c ? t / c : null; });
+  const P = sm(pace), G = sm(gap);
+  const W = 640, L = 44, R = 10, x = scale(xs[0], xs.at(-1), L, W - R);
+  const panels = [
+    { key: "alt", h: 120, ys: [s.altitude_m], cols: ["var(--alt)"], fill: true, unit: "m", f: (v) => Math.round(v) },
+    { key: "pace", h: 120, ys: [P, G], cols: ["var(--pace)", "var(--gap)"], invert: true, unit: "/km", f: fmt.pace, clip: true },
+    { key: "hr", h: 110, ys: [s.hr], cols: ["var(--hr)"], unit: "bpm", f: (v) => Math.round(v), zones: true },
+  ];
+  let html = "";
+  for (const p of panels) {
+    const vals = p.ys.flat().filter((v) => v != null);
+    if (!vals.length) continue;
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    if (p.clip) { const sorted = [...vals].sort((a, b) => a - b); lo = sorted[Math.floor(sorted.length * 0.02)]; hi = sorted[Math.floor(sorted.length * 0.98)]; }
+    const pad = (hi - lo) * 0.08 || 5; lo -= pad; hi += pad;
+    const y = p.invert ? scale(lo, hi, 8, p.h - 6) : scale(lo, hi, p.h - 6, 8);
+    p.y = y; p.lo = lo; p.hi = hi;
+    let svg = `<svg class="chart" viewBox="0 0 ${W} ${p.h}" data-k="${p.key}" style="touch-action:pan-y"><g class="grid">`;
+    for (const t of niceTicks(lo, hi, 3)) svg += `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${p.f(t)}</text>`;
+    svg += `</g>`;
+    if (p.zones && state.settings) {
+      const hm = state.settings.hr_max, fl = state.settings.zone_floors;
+      fl.forEach((f, i) => { const a = f * hm, b = (fl[i + 1] || 1.1) * hm; if (b < lo || a > hi) return; const ya = y(Math.max(a, lo)), yb = y(Math.min(b, hi)); svg += `<rect x="${L}" y="${Math.min(ya, yb)}" width="${W - R - L}" height="${Math.abs(ya - yb)}" fill="${ZONES[i]}" opacity=".09"/>`; });
+    }
+    p.ys.forEach((arr, k) => {
+      const clipped = arr.map((v) => v == null ? null : Math.min(Math.max(v, lo), hi));
+      const d = linePath(xs, clipped, x, y);
+      if (p.fill && k === 0) svg += `<path d="${d}L${x(xs.at(-1))},${p.h - 6}L${x(xs[0])},${p.h - 6}Z" fill="var(--alt-fill)"/>`;
+      svg += `<path d="${d}" fill="none" stroke="${p.cols[k]}" stroke-width="${k ? 1.3 : 1.8}" ${k ? 'stroke-dasharray="4 3"' : ""}/>`;
+    });
+    svg += `<line class="cross" x1="0" x2="0" y1="0" y2="${p.h}" stroke="var(--ink)" stroke-width="1" style="display:none"/></svg>`;
+    const lg = p.key === "pace" ? `<div class="legend"><span><i style="background:var(--pace)"></i>Pace</span><span><i style="background:var(--gap)"></i>GAP</span></div>` : "";
+    html += `<div style="margin-top:6px"><div class="row" style="justify-content:space-between"><span class="label">${{ alt: "Độ cao", pace: "Pace", hr: "Nhịp tim" }[p.key]}</span>${lg}</div>${svg}</div>`;
+  }
+  const kmTicks = niceTicks(xs[0], xs.at(-1), 6);
+  html += `<svg class="chart" viewBox="0 0 ${W} 18">${kmTicks.map((t) => `<text x="${x(t)}" y="13" text-anchor="middle">${t} km</text>`).join("")}</svg>`;
+  $("#charts").innerHTML = html;
+
+  const ro = $("#readout"), dot = document.getElementById("route-dot");
+  const onMove = (ev) => {
+    const svg = ev.currentTarget, r = svg.getBoundingClientRect();
+    const px = (ev.clientX - r.left) / r.width * W;
+    const km = x.inv(Math.max(L, Math.min(W - R, px)));
+    let i = 0, lo2 = 0, hi2 = n - 1; while (lo2 < hi2) { const m = (lo2 + hi2) >> 1; xs[m] < km ? lo2 = m + 1 : hi2 = m; } i = lo2;
+    $("#charts").querySelectorAll(".cross").forEach((l) => { l.style.display = ""; l.setAttribute("x1", x(xs[i])); l.setAttribute("x2", x(xs[i])); });
+    ro.innerHTML = `<span><b>${xs[i].toFixed(2)}</b> km</span><span>${fmt.dur(s.elapsed_s[i])}</span><span style="color:var(--alt)">${s.altitude_m[i] == null ? "–" : Math.round(s.altitude_m[i])} m</span><span>${s.grade[i] == null ? "–" : (s.grade[i] * 100).toFixed(0)}%</span><span style="color:var(--pace)">${fmt.pace(P[i])}/km</span><span style="color:var(--gap)">GAP ${fmt.pace(G[i])}</span><span style="color:var(--hr)">${s.hr[i] == null ? "–" : Math.round(s.hr[i])} bpm</span>`;
+    const rt = window.__route; if (dot && rt && rt.idx[i]) { dot.style.display = ""; dot.setAttribute("cx", rt.X(rt.idx[i][0])); dot.setAttribute("cy", rt.Y(rt.idx[i][1])); }
+  };
+  $("#charts").querySelectorAll("svg[data-k]").forEach((sv) => { sv.addEventListener("pointermove", onMove); sv.addEventListener("pointerdown", onMove); });
+}
+function minetti(g) { g = Math.max(-0.45, Math.min(0.45, g)); return 155.4 * g ** 5 - 30.4 * g ** 4 - 43.3 * g ** 3 + 46.3 * g ** 2 + 19.5 * g + 3.6; }
+
+// ---------- settings ----------
+async function renderSettings() {
+  const st = state.settings = await api("/api/settings");
+  app.innerHTML = `<section><button class="ghost" onclick="nav('')" style="padding-left:0">← Trang chính</button><h1 style="font-size:32px">Cài đặt nhịp tim</h1>
+    <p class="muted" style="max-width:62ch">Vùng nhịp tim tính theo % nhịp tim tối đa. Khi lưu, hệ thống tính lại thời gian theo vùng, tải TRIMP và CTL/ATL cho toàn bộ lịch sử.</p></section>
+  <section class="panel"><form id="f" class="form">
+    <label>Nhịp tim tối đa (bpm)<input id="hr_max" type="number" min="120" max="230" value="${st.hr_max}" required></label>
+    <label>Nhịp tim nghỉ (bpm)<input id="hr_rest" type="number" min="30" max="100" value="${st.hr_rest}" required></label>
+    ${st.zone_floors.map((z, i) => `<label>${ZNAME[i]} bắt đầu từ (% max)<input id="z${i}" type="number" min="30" max="100" step="1" value="${Math.round(z * 100)}" required></label>`).join("")}
+    <div style="grid-column:1/-1" class="row"><button class="primary" type="submit">Lưu và tính lại</button><span id="msg" class="muted"></span></div>
+  </form></section>
+  <section class="panel"><h3 class="label">Kết nối AI agent (MCP)</h3><p class="muted" style="margin:6px 0 0">Xem README: thêm máy chủ MCP vào Claude Desktop hoặc claude.ai để Claude đọc và phân tích dữ liệu này.</p></section>`;
+  $("#f").onsubmit = async (e) => {
+    e.preventDefault(); const msg = $("#msg"); msg.className = "muted"; msg.textContent = "Đang tính lại…";
+    const zf = [0, 1, 2, 3, 4].map((i) => +$("#z" + i).value / 100);
+    try { state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hr_max: +$("#hr_max").value, hr_rest: +$("#hr_rest").value, zone_floors: zf }) }); msg.textContent = "Đã lưu và tính lại toàn bộ lịch sử."; }
+    catch (err) { msg.className = "err"; msg.textContent = err.message; }
+  };
+}
+
+// ---------- login ----------
+function showLogin() {
+  app.innerHTML = `<section class="panel" style="max-width:420px;margin:40px auto"><h2>Nhập API token</h2>
+    <p class="muted">Token nằm trong file <code>.env</code> (biến <code>API_TOKEN</code>). Trình duyệt này sẽ nhớ token.</p>
+    <form id="lf" class="grid"><input id="tok" type="password" autocomplete="current-password" placeholder="API token" required><button class="primary">Đăng nhập</button></form></section>`;
+  $("#lf").onsubmit = (e) => { e.preventDefault(); TOKEN = $("#tok").value.trim(); try { localStorage.setItem("suunto-lab-token", TOKEN); } catch {} route(); };
+}
+
+// ---------- upload ----------
+let toastTimer;
+function toast(html, ms = 5000) { const t = $("#toast"); t.innerHTML = html; t.hidden = false; clearTimeout(toastTimer); if (ms) toastTimer = setTimeout(() => (t.hidden = true), ms); }
+async function uploadFiles(list) {
+  const files = [...list].filter((f) => /\.fit$/i.test(f.name) || f.type === "application/octet-stream" || !f.type);
+  if (!files.length) { toast("Chỉ nhận file .fit."); return; }
+  toast(`Đang tải lên ${files.length} file…`, 0);
+  const fd = new FormData(); files.forEach((f) => fd.append("files", f, f.name));
+  let res; try { res = await api("/api/upload", { method: "POST", body: fd }); } catch (e) { toast(`<b>Tải lên thất bại.</b> ${esc(e.message)}`); return; }
+  const ids = res.results.filter((r) => r.fit_file_id && !r.already_uploaded).map((r) => r.fit_file_id);
+  const dup = res.results.filter((r) => r.already_uploaded).length, rej = res.results.filter((r) => r.status === "rejected");
+  toast(`Đang xử lý ${ids.length} file…`, 0);
+  const t0 = Date.now(); let st = [];
+  while (ids.length && Date.now() - t0 < 120000) {
+    await new Promise((r) => setTimeout(r, 1200));
+    st = (await api("/api/files?limit=" + Math.max(30, ids.length + 10))).filter((f) => ids.includes(f.id));
+    if (st.every((f) => !["pending", "processing"].includes(f.status))) break;
+  }
+  const done = st.filter((f) => f.status === "done").length, dupe2 = st.filter((f) => f.status === "duplicate").length, failed = st.filter((f) => f.status === "failed");
+  toast(`<b>Đã nhập ${done} bài tập.</b><ul>${dup + dupe2 ? `<li>${dup + dupe2} file đã có trước đó, bỏ qua.</li>` : ""}${[...rej.map((r) => `<li class="err">${esc(r.name)}: ${esc(r.error)}</li>`), ...failed.map((f) => `<li>${esc(f.original_name)}: ${esc(f.error)}</li>`)].join("")}</ul>`, 8000);
+  if (done === 1 && files.length === 1) { const one = st.find((f) => f.status === "done"); if (one?.activity_id) return nav("a" + one.activity_id); }
+  route();
+}
+$("#file").onchange = (e) => { uploadFiles(e.target.files); e.target.value = ""; };
+let dragDepth = 0;
+addEventListener("dragenter", (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragDepth++; $("#drop").hidden = false; } });
+addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("#drop").hidden = true; } });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => { e.preventDefault(); dragDepth = 0; $("#drop").hidden = true; if (e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files); });
+
+// ---------- routing ----------
+function nav(h) { if (location.hash.slice(1) === h) route(); else location.hash = h; }
+async function route() {
+  const h = location.hash.slice(1);
+  try {
+    if (!state.settings) state.settings = await api("/api/settings");
+    if (/^a\d+$/.test(h)) await renderActivity(+h.slice(1));
+    else if (h === "settings") await renderSettings();
+    else await renderHome();
+    scrollTo(0, 0);
+  } catch (e) { if (e.message !== "auth") app.innerHTML = `<section class="panel empty"><h2>Không kết nối được máy chủ</h2><p class="muted">${esc(e.message)}</p><button onclick="route()">Thử lại</button></section>`; }
+}
+addEventListener("hashchange", route);
+$("#home").onclick = () => nav("");
+$("#home").onkeydown = (e) => e.key === "Enter" && nav("");
+$("#btn-settings").onclick = () => nav("settings");
+route();
+</script>
+</body>
+</html>
