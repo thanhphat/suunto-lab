@@ -1,6 +1,9 @@
 """HTTP API + web dashboard."""
+import hashlib
+import hmac
 import logging
 import secrets
+import time
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -298,6 +301,36 @@ def notebook_asset(name: str):
     if name not in ("app.js", "figures.js"):
         raise HTTPException(404)
     return FileResponse(STATIC / "notebook" / name, headers={"Cache-Control": "no-cache"})
+
+
+# ---------- exercise media ----------
+# <video> cannot send the Bearer header, so the notebook asks for a short-lived signed query string once
+# and appends it to every /media URL.
+
+def _media_sig(exp: int) -> str:
+    key = (config.API_TOKEN or "").encode()
+    return hmac.new(key, f"media:{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+@app.get("/api/media/ticket")
+def media_ticket(athlete: int = Depends(auth)):
+    if not config.MEDIA_DIR:
+        return {"enabled": False}
+    exp = int(time.time()) + config.MEDIA_TICKET_HOURS * 3600
+    return {"enabled": True, "query": f"exp={exp}&sig={_media_sig(exp)}", "expires": exp}
+
+
+@app.get("/media/{path:path}")
+def media(path: str, exp: int = 0, sig: str = ""):
+    if not config.MEDIA_DIR:
+        raise HTTPException(404)
+    if exp < time.time() or not hmac.compare_digest(sig, _media_sig(exp)):
+        raise HTTPException(403, "Link video đã hết hạn, tải lại trang.")
+    root = config.MEDIA_DIR.resolve()
+    f = (root / path).resolve()
+    if not f.is_relative_to(root) or not f.is_file():
+        raise HTTPException(404, "Không có file này trong thư mục media.")
+    return FileResponse(f, headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.get("/healthz")

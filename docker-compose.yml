@@ -23,7 +23,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "127.0.0.1:5432:5432"        # local only, for psql / backups
+      - "127.0.0.1:${DB_HOST_PORT:-5432}:5432"   # local only, for psql / backups
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U suunto -d suunto"]
       interval: 5s
@@ -31,8 +31,14 @@ services:
 
   api:
     <<: *app
+    environment:
+      DATABASE_URL: postgresql://suunto:${POSTGRES_PASSWORD}@db:5432/suunto
+      FIT_STORAGE_DIR: /data/fit
+      MEDIA_DIR: /data/media
     volumes:
       - fitfiles:/data/fit
+      # Exercise videos for the notebook, read-only. Set MEDIA_HOST_DIR in .env to your own folder.
+      - ${MEDIA_HOST_DIR:-./data/media}:/data/media:ro
     ports:
       - "127.0.0.1:8000:8000"
 

@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   var EX = [], CATS = {}, BLOCKS = {}, TESTS = [], EXM = {};
+  var MEDIA = { query: '', at: 0 }; // signed query string for /media, refreshed every few hours
   var PLAN = null, PLANS = [], RACES = [], J = { notes: {}, tests: [], coach: { days: {}, weeks: {} } };
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
@@ -375,7 +376,7 @@
     });
     var el = $('#exlist'); if (!el) return;
     el.innerHTML = list.length ? list.map(function (e) {
-      return '<a class="excard" href="#ex/' + e.id + '"><span class="cat">' + esc(CATS[e.cat]) + '</span><b>' + esc(e.name) + '</b><span class="mus">' + esc(e.muscles) + '</span></a>';
+      return '<a class="excard" href="#ex/' + e.id + '"><span class="cat">' + esc(CATS[e.cat]) + '</span><b>' + esc(e.name) + (e.video ? ' <span class="vidmark" title="Có video">▶</span>' : '') + '</b><span class="mus">' + esc(e.muscles) + '</span></a>';
     }).join('') : '<p class="small">Không có bài nào khớp. Thử từ khóa khác.</p>';
   }
 
@@ -386,10 +387,24 @@
   }
   function closeSheet() { $('#sheet').hidden = true; document.body.classList.remove('locked'); }
   function list(arr, tag) { return arr && arr.length ? '<' + tag + '>' + arr.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</' + tag + '>' : ''; }
+  // "video": "path" or [{src, label, poster, t}] relative to MEDIA_DIR; t = start second (for long follow-along videos)
+  function mediaUrl(p) { return '/media/' + p.split('/').map(encodeURIComponent).join('/') + '?' + MEDIA.query; }
+  function vidHtml(v) {
+    if (!v || !MEDIA.query) return '';
+    return [].concat(v).map(function (x) {
+      if (typeof x === 'string') x = { src: x };
+      return '<figure class="vidwrap"><video controls playsinline preload="none" src="' + esc(mediaUrl(x.src) + (x.t ? '#t=' + x.t : '')) + '"' +
+        (x.poster ? ' poster="' + esc(mediaUrl(x.poster)) + '"' : '') + '></video>' + (x.label ? '<figcaption>' + esc(x.label) + '</figcaption>' : '') + '</figure>';
+    }).join('');
+  }
+  function loadMedia() {
+    return api('/api/media/ticket').then(function (m) { MEDIA = { query: m.enabled ? m.query : '', at: Date.now() }; }, function () { });
+  }
   function exHtml(e) {
     var fig = e.poses ? window.TFig.svg(e.poses, e.labels) : '';
     var used = Object.keys(BLOCKS).filter(function (k) { return BLOCKS[k].items.some(function (x) { return x[0] === e.id; }); });
     return '<div class="eyebrow">' + esc(CATS[e.cat]) + '</div><h2>' + esc(e.name) + '</h2><p class="en">' + esc(e.en) + '</p>' +
+      vidHtml(e.video) +
       (fig ? '<figure class="figwrap">' + fig + '<figcaption>Hình minh họa đơn giản. Đọc phần hướng dẫn để làm đúng.</figcaption></figure>' : '') +
       '<p class="lead">' + esc(e.purpose) + '</p>' +
       '<dl class="facts"><div><dt>Cơ được tập</dt><dd>' + esc(e.muscles) + '</dd></div><div><dt>Liều chuẩn</dt><dd>' + esc(e.dose) + '</dd></div>' + (e.tempo ? '<div><dt>Nhịp</dt><dd>' + esc(e.tempo) + '</dd></div>' : '') + '</dl>' +
@@ -401,13 +416,14 @@
   }
   function blkHtml(k) {
     var b = BLOCKS[k];
-    return '<div class="eyebrow">Mẫu buổi tập · ~' + b.min + ' phút</div><h2>' + esc(b.name) + '</h2>' + (b.note ? '<p class="lead">' + esc(b.note) + '</p>' : '') +
+    return '<div class="eyebrow">Mẫu buổi tập · ~' + b.min + ' phút</div><h2>' + esc(b.name) + '</h2>' + (b.note ? '<p class="lead">' + esc(b.note) + '</p>' : '') + vidHtml(b.video) +
       '<ol class="blklist">' + b.items.map(function (x) { var e = EXM[x[0]]; return '<li><a href="#ex/' + x[0] + '"><b>' + esc(e ? e.name : x[0]) + '</b></a><span class="dose">' + esc(x[1]) + '</span>' + (e ? '<span class="small">' + esc(e.purpose) + '</span>' : '') + '</li>'; }).join('') + '</ol>';
   }
 
   /* ---------- định tuyến bằng #hash ---------- */
   function route() {
     var h = (location.hash || '').slice(1), parts = h.split('/');
+    if (MEDIA.query && Date.now() - MEDIA.at > 3 * 3600e3 && /^(ex|blk)$/.test(parts[0])) return loadMedia().then(route);
     if (parts[0] === 'ex' && EXM[parts[1]]) return sheet(exHtml(EXM[parts[1]]));
     if (parts[0] === 'blk' && BLOCKS[parts[1]]) return sheet(blkHtml(parts[1]));
     if (parts[0] === 'rv') { var rv = RACES.filter(function (x) { return String(x.id) === parts[1]; })[0]; if (rv) return sheet(raceView(rv)); }
@@ -525,7 +541,7 @@
   }
   function boot() {
     status('wait');
-    Promise.all([api('/api/nb/library'), api('/api/nb/plans'), api('/api/nb/races')]).then(function (r) {
+    Promise.all([api('/api/nb/library'), api('/api/nb/plans'), api('/api/nb/races'), loadMedia()]).then(function (r) {
       RACES = r[2];
       var lib = r[0]; EX = lib.exercises; CATS = lib.cats; BLOCKS = lib.blocks; TESTS = lib.tests;
       EXM = {}; EX.forEach(function (e) { EXM[e.id] = e; });

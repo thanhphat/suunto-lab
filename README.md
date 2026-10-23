@@ -141,6 +141,8 @@ docker compose exec -T api python -m app.notebook load-plan    < private/noteboo
 docker compose exec -T api python -m app.notebook import-legacy < so-tap-export.json  # file "Xuất file" của sổ tập
 ```
 
+**Video bài tập (tùy chọn).** Nếu có thư mục video bài tập riêng (ví dụ khóa học bạn đã mua và tải về), đặt `MEDIA_HOST_DIR=/đường/dẫn/thư-mục` trong `.env`: compose mount nó chỉ đọc vào `/data/media` của api. Trong thư viện, bài tập hoặc mẫu buổi tập thêm trường `"video"` là đường dẫn tương đối trong thư mục đó, hoặc danh sách `[{"src": "...", "label": "...", "poster": "....jpg", "t": 90}]` (`t` là giây bắt đầu, dùng cho video tập theo dài). Trang bài tập hiện trình phát, tua được. Trình duyệt không gửi được token cho thẻ `<video>`, nên sổ tập xin một chữ ký tạm (`/api/media/ticket`, hết hạn sau `MEDIA_TICKET_HOURS` giờ) và gắn vào URL `/media/...`. Đường dẫn video là dữ liệu cá nhân, chỉ để trong `private/`.
+
 ## Thiết kế dữ liệu
 
 Dữ liệu chia ba tầng. Tầng dưới là nguồn, tầng trên luôn tính lại được từ tầng dưới.

@@ -22,7 +22,12 @@ API_TOKEN = _env("API_TOKEN")
 MCP_TOKEN = _env("MCP_TOKEN")
 MCP_ALLOWED_HOSTS = [h.strip() for h in (_env("MCP_ALLOWED_HOSTS", "") or "").split(",") if h.strip()]
 
-ATHLETE_NAME = _env("ATHLETE_NAME", "Me")
+# Optional read-only folder of exercise videos and images (e.g. a course archive you own). Notebook library
+# items point into it by relative path ("video": [{"src": ...}]); unset disables /media.
+MEDIA_DIR = Path(_env("MEDIA_DIR")) if _env("MEDIA_DIR") else None
+MEDIA_TICKET_HOURS = int(_env("MEDIA_TICKET_HOURS", "12"))
+
+ATHLETE_NAME =_env("ATHLETE_NAME", "Me")
 DEFAULT_TZ = _env("DEFAULT_TZ", "Asia/Ho_Chi_Minh")
 
 WORKER_POLL_SECONDS = float(_env("WORKER_POLL_SECONDS", "2"))
