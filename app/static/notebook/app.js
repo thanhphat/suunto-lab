@@ -382,10 +382,13 @@
 
   /* ---------- Chi tiết bài / khối ---------- */
   function sheet(html) {
-    var s = $('#sheet'); $('#sheetbody').innerHTML = html; s.hidden = false; document.body.classList.add('locked');
+    var s = $('#sheet'); $('#sheetbody').querySelectorAll('video').forEach(function (v) { v.pause(); }); $('#sheetbody').innerHTML = html; s.hidden = false; document.body.classList.add('locked');
     $('#sheetbody').scrollTop = 0; $('#closebtn').focus();
   }
-  function closeSheet() { $('#sheet').hidden = true; document.body.classList.remove('locked'); }
+  function closeSheet() {
+    // Hiding the sheet leaves its <video> playing; drop the content so playback stops.
+    $('#sheet').hidden = true; $('#sheetbody').innerHTML = ''; document.body.classList.remove('locked');
+  }
   function list(arr, tag) { return arr && arr.length ? '<' + tag + '>' + arr.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</' + tag + '>' : ''; }
   // "video": "path" or [{src, label, poster, t}] relative to MEDIA_DIR; t = start second (for long follow-along videos)
   function mediaUrl(p) { return '/media/' + p.split('/').map(encodeURIComponent).join('/') + '?' + MEDIA.query; }
@@ -428,7 +431,10 @@
     if (parts[0] === 'blk' && BLOCKS[parts[1]]) return sheet(blkHtml(parts[1]));
     if (parts[0] === 'rv') { var rv = RACES.filter(function (x) { return String(x.id) === parts[1]; })[0]; if (rv) return sheet(raceView(rv)); }
     if (parts[0] === 'race') { var rr = RACES.filter(function (x) { return String(x.id) === parts[1]; })[0]; if (rr || parts[1] === 'new') return sheet(raceForm(rr)); }
+    var wasOpen = !$('#sheet').hidden;
     closeSheet();
+    // Closing a sheet back onto the same view keeps the page as it was (open lists, scroll position).
+    if (wasOpen && parts[0] === ui.view) return;
     if (['week', 'lib', 'today', 'cap', 'races'].indexOf(parts[0]) >= 0) { ui.view = parts[0]; render(); }
   }
   function back() { if (history.length > 1 && /^#(ex|blk|race|rv)\//.test(location.hash)) history.back(); else { location.hash = ui.view; } }
